@@ -42,12 +42,25 @@ try:
             _ui.write(e.EV_REL, e.REL_Y, dy)
         _ui.syn()
 
+    def click_left_evdev() -> None:
+        """Left click on the uinput pointer (matches joystick REL moves on Wayland)."""
+        if _ui is None:
+            return
+        _ui.write(e.EV_KEY, e.BTN_LEFT, 1)
+        _ui.syn()
+        time.sleep(0.02)
+        _ui.write(e.EV_KEY, e.BTN_LEFT, 0)
+        _ui.syn()
+
     _HAVE_UINPUT = True
 except Exception as ex:
     _HAVE_UINPUT = False
     _UINPUT_ERR = ex
 
     def move_rel(dx: int, dy: int) -> None:
+        pass
+
+    def click_left_evdev() -> None:
         pass
 
 
@@ -120,7 +133,10 @@ def main() -> None:
         if (not GPIO.input(JOY_PRESS)) and (not joy_press_down):
             joy_press_down = True
             print("JOY_PRESS")
-            m.click(x, y, 1)
+            if _HAVE_UINPUT:
+                click_left_evdev()
+            else:
+                m.click(x, y, 1)
         if GPIO.input(JOY_PRESS):
             joy_press_down = False
 
