@@ -75,7 +75,9 @@ BTN_KEY1 = 21
 BTN_KEY2 = 20
 BTN_KEY3 = 16
 
-STEP = 12
+# Joystick speed: lower STEP = smaller nudge each tick; higher POLL_INTERVAL_S = fewer ticks per second.
+STEP = 8
+POLL_INTERVAL_S = 0.05
 
 for pin in (
     JOY_UP,
@@ -169,7 +171,7 @@ def main() -> None:
             if dr:
                 m.move(x + STEP, y)
 
-        time.sleep(0.02)
+        time.sleep(POLL_INTERVAL_S)
 
 
 if __name__ == "__main__":
