@@ -1,5 +1,6 @@
 # Waveshare 1.3" LCD HAT — GPIO mouse
 #
+# Keys: KEY1 = scroll up, KEY2 = right click, KEY3 = scroll down.
 # Clicks: PyMouse (needs DISPLAY=:0 in a desktop terminal).
 # Joystick moves: linux uinput (works when XWarpPointer is blocked on Wayland).
 #
@@ -13,6 +14,7 @@ from pymouse import PyMouse
 import time
 import os
 import RPi.GPIO as GPIO
+import subprocess
 
 _ui = None
 _HAVE_UINPUT = False
@@ -25,7 +27,7 @@ try:
     _ui = UInput(
         {
             e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-            e.EV_REL: [e.REL_X, e.REL_Y],
+            e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL],
         },
         name="waveshare-hat-joy",
         vendor=0xF00F,
@@ -52,6 +54,23 @@ try:
         _ui.write(e.EV_KEY, e.BTN_LEFT, 0)
         _ui.syn()
 
+    def click_right_evdev() -> None:
+        """Right click on the uinput pointer."""
+        if _ui is None:
+            return
+        _ui.write(e.EV_KEY, e.BTN_RIGHT, 1)
+        _ui.syn()
+        time.sleep(0.02)
+        _ui.write(e.EV_KEY, e.BTN_RIGHT, 0)
+        _ui.syn()
+
+    def scroll_wheel_evdev(delta: int) -> None:
+        """Vertical scroll on the uinput pointer (negative = up, positive = down)."""
+        if _ui is None or delta == 0:
+            return
+        _ui.write(e.EV_REL, e.REL_WHEEL, delta)
+        _ui.syn()
+
     _HAVE_UINPUT = True
 except Exception as ex:
     _HAVE_UINPUT = False
@@ -61,6 +80,12 @@ except Exception as ex:
         pass
 
     def click_left_evdev() -> None:
+        pass
+
+    def click_right_evdev() -> None:
+        pass
+
+    def scroll_wheel_evdev(delta: int) -> None:
         pass
 
 
@@ -78,6 +103,25 @@ BTN_KEY3 = 16
 # Joystick speed: lower STEP = smaller nudge each tick; higher POLL_INTERVAL_S = fewer ticks per second.
 STEP = 8
 POLL_INTERVAL_S = 0.05
+
+# Key1 = scroll up, Key3 = scroll down (uinput REL_WHEEL units per press).
+SCROLL_WHEEL_DELTA = 1
+
+
+def scroll_x11(button: str) -> None:
+    """X11 scroll via xdotool (button 4 = up, 5 = down). Used when uinput is unavailable."""
+    if button not in ("up", "down"):
+        return
+    n = "4" if button == "up" else "5"
+    try:
+        subprocess.run(
+            ["xdotool", "click", n],
+            check=False,
+            timeout=2,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
 
 for pin in (
     JOY_UP,
@@ -113,22 +157,31 @@ def main() -> None:
 
         if (not GPIO.input(BTN_KEY1)) and (not key1_down):
             key1_down = True
-            print("KEY1")
-            m.click(x, y, 1)
+            print("KEY1 (scroll up)")
+            if _HAVE_UINPUT:
+                scroll_wheel_evdev(-SCROLL_WHEEL_DELTA)
+            else:
+                scroll_x11("up")
         if GPIO.input(BTN_KEY1):
             key1_down = False
 
         if (not GPIO.input(BTN_KEY2)) and (not key2_down):
             key2_down = True
-            print("KEY2")
-            m.click(x, y, 2)
+            print("KEY2 (right click)")
+            if _HAVE_UINPUT:
+                click_right_evdev()
+            else:
+                m.click(x, y, 3)
         if GPIO.input(BTN_KEY2):
             key2_down = False
 
         if (not GPIO.input(BTN_KEY3)) and (not key3_down):
             key3_down = True
-            print("KEY3")
-            m.click(x, y, 3)
+            print("KEY3 (scroll down)")
+            if _HAVE_UINPUT:
+                scroll_wheel_evdev(SCROLL_WHEEL_DELTA)
+            else:
+                scroll_x11("down")
         if GPIO.input(BTN_KEY3):
             key3_down = False
 

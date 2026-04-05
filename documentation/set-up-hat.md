@@ -3,6 +3,8 @@
 
 I set up my waveshare hat using these steps. Note that I am on the latest 64-bit raspberry pi os (Port of Trixie from December 2025)
 
+## Display
+
 ### 1. Build and install `panel.bin`
 
 **a.** Install tools and clone:
@@ -77,3 +79,5 @@ dtparam=reset-gpio=27,dc-gpio=25,backlight-gpio=24
 ```bash
 sudo reboot
 ```
+
+## Mouse
