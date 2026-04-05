@@ -1,0 +1,5 @@
+# pygame-ce provides `import pygame` and ships wheels for newer Python (e.g. 3.14).
+# On Raspberry Pi you can use `pygame` instead if you prefer stock wheels from pip/apt.
+pygame-ce>=2.5.7
+gpiozero>=2.0.1
+cairosvg>=2.7.0

@@ -1,0 +1,9 @@
+{
+  "allow_animations": true,
+  "audio": true,
+  "audio.music_enabled": true,
+  "audio.sfx_enabled": true,
+  "gameplay": true,
+  "gameplay.randomize_seeds": false,
+  "gameplay.show_debug_overlay": false
+}

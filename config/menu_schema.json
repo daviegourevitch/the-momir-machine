@@ -1,0 +1,43 @@
+{
+  "menu": [
+    {
+      "id": "allow_animations",
+      "label": "Allow Animations",
+      "default": true
+    },
+    {
+      "id": "audio",
+      "label": "Audio",
+      "default": true,
+      "submenu": [
+        {
+          "id": "music_enabled",
+          "label": "Music Enabled",
+          "default": true
+        },
+        {
+          "id": "sfx_enabled",
+          "label": "SFX Enabled",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "gameplay",
+      "label": "Gameplay",
+      "default": true,
+      "submenu": [
+        {
+          "id": "randomize_seeds",
+          "label": "Randomize Seeds",
+          "default": false
+        },
+        {
+          "id": "show_debug_overlay",
+          "label": "Show Debug Overlay",
+          "default": false
+        }
+      ]
+    }
+  ]
+}
