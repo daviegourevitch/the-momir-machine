@@ -20,6 +20,7 @@ from constants import (
     ALL_HAT_ACTIONS,
     MANA_JUMP_THRESHOLD,
     MANA_JUMP_VALUE,
+    MANA_MAX,
     MANA_MIN,
     MENU_SCHEMA_PATH,
     SETTINGS_PATH,
@@ -60,14 +61,26 @@ class MomirApp:
         self.selection_stack: List[int] = [0]
         self.prefix_stack: List[str] = [""]
 
+    def _clamp_mana(self) -> None:
+        self.mana_value = max(MANA_MIN, min(self.mana_value, MANA_MAX))
+
     def _inc_mana(self) -> None:
+        self._clamp_mana()
+        if self.mana_value >= MANA_MAX:
+            return
         if self.mana_value == MANA_JUMP_THRESHOLD:
             self.mana_value = MANA_JUMP_VALUE
         else:
             self.mana_value += 1
+        self._clamp_mana()
 
     def _dec_mana(self) -> None:
-        self.mana_value = max(MANA_MIN, self.mana_value - 1)
+        self._clamp_mana()
+        if self.mana_value == MANA_JUMP_VALUE:
+            self.mana_value = MANA_JUMP_THRESHOLD
+        else:
+            self.mana_value = max(MANA_MIN, self.mana_value - 1)
+        self._clamp_mana()
 
     def _current_menu(self) -> List[Dict[str, Any]]:
         return self.menu_stack[-1]
