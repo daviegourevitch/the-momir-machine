@@ -2,9 +2,6 @@
 # On Raspberry Pi you can use `pygame` instead if you prefer stock wheels from pip/apt.
 pygame-ce>=2.5.7
 gpiozero>=2.0.1
-# Raspberry Pi: gpiozero expects the `lgpio` module; without it you get RPi.GPIO fallback
-# and often "Failed to add edge detection". Prefer apt: `sudo apt install python3-lgpio`
-# or pip (ARM only): `pip install rpi-lgpio`
-# Marker must use PEP 508 comparisons only (no `in (...)` tuple — older pip rejects it).
-rpi-lgpio>=0.2.0; sys_platform == "linux" and (platform_machine == "aarch64" or platform_machine == "armv7l" or platform_machine == "armv6l")
+# Raspberry Pi: install lgpio for Python via apt (not pip — pip often builds from source and
+# needs swig + dev headers). See documentation/set-up-hat.md § Python GPIO.
 cairosvg>=2.7.0

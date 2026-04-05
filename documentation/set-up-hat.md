@@ -82,15 +82,26 @@ sudo reboot
 
 ## Python GPIO (Momir app / gpiozero)
 
-If you see `No module named 'lgpio'` or `Failed to add edge detection` when running the app, gpiozero is falling back from the preferred **lgpio** backend. Install Python bindings for **lgpio** (pick one):
+If you see `No module named 'lgpio'` or `Failed to add edge detection` when running the app, gpiozero is falling back from the preferred **lgpio** backend.
+
+**Recommended (prebuilt, no compiler):** install the distro package:
 
 ```bash
 sudo apt install python3-lgpio
 ```
 
-Or, in your venv on the Pi:
+**Virtualenv:** `python3-lgpio` is installed for the **system** interpreter. A normal venv cannot see it unless you allow system site-packages. Either recreate the venv:
 
 ```bash
+python3 -m venv --system-site-packages ~/waveshare-mouse-venv
+```
+
+or keep your existing venv and add system packages (same flag when creating the venv next time).
+
+**If you insist on pip** (`rpi-lgpio` / `lgpio`), pip may compile C extensions and fail with `command 'swig' failed`. Install build dependencies, then retry:
+
+```bash
+sudo apt install swig liblgpio-dev python3-dev build-essential
 pip install rpi-lgpio
 ```
 
