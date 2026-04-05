@@ -65,7 +65,7 @@ try:
         _ui.syn()
 
     def scroll_wheel_evdev(delta: int) -> None:
-        """Vertical scroll on the uinput pointer (negative = up, positive = down)."""
+        """Vertical scroll on the uinput pointer (signs tuned so KEY1=up, KEY3=down)."""
         if _ui is None or delta == 0:
             return
         _ui.write(e.EV_REL, e.REL_WHEEL, delta)
@@ -109,10 +109,10 @@ SCROLL_WHEEL_DELTA = 1
 
 
 def scroll_x11(button: str) -> None:
-    """X11 scroll via xdotool (button 4 = up, 5 = down). Used when uinput is unavailable."""
+    """X11 scroll via xdotool. Mapping reversed vs common 4=up/5=down so it matches uinput."""
     if button not in ("up", "down"):
         return
-    n = "4" if button == "up" else "5"
+    n = "5" if button == "up" else "4"
     try:
         subprocess.run(
             ["xdotool", "click", n],
@@ -159,7 +159,7 @@ def main() -> None:
             key1_down = True
             print("KEY1 (scroll up)")
             if _HAVE_UINPUT:
-                scroll_wheel_evdev(-SCROLL_WHEEL_DELTA)
+                scroll_wheel_evdev(SCROLL_WHEEL_DELTA)
             else:
                 scroll_x11("up")
         if GPIO.input(BTN_KEY1):
@@ -179,7 +179,7 @@ def main() -> None:
             key3_down = True
             print("KEY3 (scroll down)")
             if _HAVE_UINPUT:
-                scroll_wheel_evdev(SCROLL_WHEEL_DELTA)
+                scroll_wheel_evdev(-SCROLL_WHEEL_DELTA)
             else:
                 scroll_x11("down")
         if GPIO.input(BTN_KEY3):
