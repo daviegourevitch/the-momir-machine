@@ -27,9 +27,29 @@ def _gpio_enabled() -> bool:
     return True
 
 
+def _configure_gpiozero_pin_factory() -> None:
+    """Prefer lgpio before gpiozero is imported.
+
+    On recent Raspberry Pi OS, gpiozero tries ``lgpio`` first. If the Python
+    module is missing, it falls back to RPi.GPIO, which often fails with
+    "Failed to add edge detection" (especially on Pi 5). Installing
+    ``python3-lgpio`` (apt) or ``rpi-lgpio`` (pip) and forcing this factory
+    avoids that path.
+    """
+    if os.environ.get("GPIOZERO_PIN_FACTORY", "").strip():
+        return
+    try:
+        import lgpio  # noqa: F401
+
+        os.environ["GPIOZERO_PIN_FACTORY"] = "lgpio"
+    except ImportError:
+        pass
+
+
 try:
     if not _gpio_enabled():
         raise ImportError("GPIO disabled on this platform (set MOMIR_FORCE_GPIO=1 to override).")
+    _configure_gpiozero_pin_factory()
     from gpiozero import Button, RotaryEncoder
 
     HAVE_GPIOZERO = True
@@ -77,6 +97,11 @@ class InputController:
                 self.hat_buttons.append(btn)
         except Exception as exc:
             print(f"GPIO unavailable ({exc}); running with keyboard controls only.")
+            print(
+                "Hint: on Raspberry Pi OS install lgpio for Python, e.g. "
+                "`sudo apt install python3-lgpio` or `pip install rpi-lgpio`, "
+                "then retry (see documentation/set-up-hat.md)."
+            )
             self.close_gpio()
 
     def close_gpio(self) -> None:

@@ -80,4 +80,20 @@ dtparam=reset-gpio=27,dc-gpio=25,backlight-gpio=24
 sudo reboot
 ```
 
+## Python GPIO (Momir app / gpiozero)
+
+If you see `No module named 'lgpio'` or `Failed to add edge detection` when running the app, gpiozero is falling back from the preferred **lgpio** backend. Install Python bindings for **lgpio** (pick one):
+
+```bash
+sudo apt install python3-lgpio
+```
+
+Or, in your venv on the Pi:
+
+```bash
+pip install rpi-lgpio
+```
+
+The app sets `GPIOZERO_PIN_FACTORY=lgpio` when `import lgpio` succeeds so gpiozero does not rely on RPi.GPIO for edges.
+
 ## Mouse
