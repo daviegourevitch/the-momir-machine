@@ -31,6 +31,38 @@ class UI:
         self.main_menu_label_font: Optional[pygame.font.Font] = None
         self.main_menu_value_font: Optional[pygame.font.Font] = None
 
+    def _draw_loading_overlay(self) -> None:
+        if self.screen is None:
+            return
+        title_font = self.title_font or self.menu_font
+        hint_font = self.hint_font
+        if title_font is None or hint_font is None:
+            return
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        self.screen.blit(overlay, (0, 0))
+
+        ticks = pygame.time.get_ticks()
+        dots = "." * ((ticks // 250) % 4)
+        loading_text = title_font.render(f"Loading{dots}", True, (255, 255, 255))
+        hint_text = hint_font.render("Please wait", True, (210, 210, 210))
+
+        self.screen.blit(
+            loading_text,
+            (
+                (SCREEN_WIDTH - loading_text.get_width()) // 2,
+                (SCREEN_HEIGHT // 2) - loading_text.get_height(),
+            ),
+        )
+        self.screen.blit(
+            hint_text,
+            (
+                (SCREEN_WIDTH - hint_text.get_width()) // 2,
+                (SCREEN_HEIGHT // 2) + 6,
+            ),
+        )
+
     def _draw_status_banner(self, text: str) -> None:
         if self.screen is None or self.hint_font is None:
             return
@@ -106,6 +138,7 @@ class UI:
         mana_value: Union[int, float],
         popup_message: str | None = None,
         status_message: str | None = None,
+        is_loading: bool = False,
     ) -> None:
         if self.screen is None:
             return
@@ -142,6 +175,8 @@ class UI:
             self._draw_status_banner(status_message)
         if popup_message:
             self._draw_popup(popup_message)
+        if is_loading:
+            self._draw_loading_overlay()
 
     def draw_settings_menu(
         self,

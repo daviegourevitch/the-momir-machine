@@ -180,8 +180,9 @@
           "id": "format",
           "label": "Format",
           "type": "string",
-          "default": "vintage",
+          "default": "no_format",
           "options": [
+            "no_format",
             "standard",
             "pioneer",
             "modern",
@@ -192,6 +193,11 @@
         }
       ],
       "quick_options": [
+        {
+          "id": "no_format",
+          "label": "No format",
+          "values": { "format": "no_format" }
+        },
         {
           "id": "standard",
           "label": "Standard",

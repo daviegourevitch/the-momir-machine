@@ -64,6 +64,7 @@ class MomirApp:
         self.status_message: Optional[str] = None
         self.status_message_until_ms = 0
         self.startup_status_message: Optional[str] = None
+        self.is_loading = False
         self.runtime_lock = RuntimeLock()
         self._load_mana_values_for_current_settings()
 
@@ -240,10 +241,24 @@ class MomirApp:
         return self.status_message
 
     def _pick_random_card(self) -> None:
+        self.is_loading = True
+        self.popup_message = None
+        self._drop_pending_actions()
+        self._render()
+        pygame.event.pump()
         card_name = self.card_service.get_random_card_name(
             self._current_mana_value(), self.settings_schema, self.settings
         )
+        self.is_loading = False
+        self._drop_pending_actions()
         self.popup_message = card_name or "No matching card found."
+
+    def _drop_pending_actions(self) -> None:
+        while True:
+            try:
+                self.action_queue.get_nowait()
+            except queue.Empty:
+                break
 
     def _save_settings_if_valid(self) -> None:
         available_values = self.card_service.get_available_mana_values(
@@ -263,6 +278,9 @@ class MomirApp:
         print("Settings saved.")
 
     def _handle_action(self, action: str) -> None:
+        if self.is_loading:
+            return
+
         if self.state == STATE_MAIN_MENU:
             if action == ACTION_ROTARY_CW:
                 self._inc_mana_index()
@@ -341,6 +359,7 @@ class MomirApp:
                 self._current_mana_value(),
                 popup_message=self.popup_message,
                 status_message=status_message,
+                is_loading=self.is_loading,
             )
         else:
             current_setting = self._current_setting()
