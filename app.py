@@ -95,6 +95,16 @@ class MomirApp:
         self.advanced_field_index = idx
         return fields[idx]
 
+    @staticmethod
+    def _setting_allows_advanced(setting: Dict[str, Any]) -> bool:
+        fields = setting.get("advanced_fields", [])
+        if not isinstance(fields, list) or not fields:
+            return False
+        show_advanced = setting.get("show_advanced")
+        if isinstance(show_advanced, bool):
+            return show_advanced
+        return len(fields) > 1
+
     def _open_settings(self) -> None:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
@@ -189,8 +199,7 @@ class MomirApp:
 
     def _enter_submenu(self) -> None:
         setting = self._current_setting()
-        fields = setting.get("advanced_fields", [])
-        if not isinstance(fields, list) or not fields:
+        if not self._setting_allows_advanced(setting):
             return
         self.in_advanced_mode = True
         self.advanced_field_index = 0

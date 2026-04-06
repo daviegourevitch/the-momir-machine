@@ -141,11 +141,19 @@ def _validate_setting(setting: Any) -> Dict[str, Any] | None:
             if clean_option is not None:
                 quick_options.append(clean_option)
 
+    raw_show_advanced = setting.get("show_advanced")
+    if isinstance(raw_show_advanced, bool):
+        show_advanced = raw_show_advanced
+    else:
+        # By default, advanced mode is useful only when there is more than one field.
+        show_advanced = len(fields) > 1
+
     clean_setting: Dict[str, Any] = {
         "id": setting_id,
         "label": setting.get("label") if isinstance(setting.get("label"), str) else setting_id,
         "advanced_fields": fields,
         "quick_options": quick_options,
+        "show_advanced": show_advanced,
     }
     return clean_setting
 

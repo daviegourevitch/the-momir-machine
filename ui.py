@@ -157,6 +157,8 @@ class UI:
             return
 
         selected_setting = max(0, min(selected_setting, len(settings_schema) - 1))
+        selected_item = settings_schema[selected_setting]
+        selected_can_advanced = bool(selected_item.get("show_advanced", False))
         start = max(0, min(selected_setting - max_rows + 1, len(settings_schema) - max_rows))
         end = min(len(settings_schema), start + max_rows)
 
@@ -170,12 +172,18 @@ class UI:
             setting_id = str(item.get("id", ""))
             label = str(item.get("label", setting_id))
             quick_label = quick_labels.get(setting_id, "Custom")
-            line = f"{label}: {quick_label} >"
+            advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
+            line = f"{label}: {quick_label}{advanced_suffix}"
             text_surface = self.menu_font.render(line, True, (255, 255, 255))
             self.screen.blit(text_surface, (8, y))
 
         if self.hint_font is not None:
-            hint = self.hint_font.render("L/R quick  K1 advanced  K2/JOY back  K3 save", True, (170, 170, 170))
+            hint_text = (
+                "L/R quick  K1 advanced  K2/JOY back  K3 save"
+                if selected_can_advanced
+                else "L/R quick  K2/JOY back  K3 save"
+            )
+            hint = self.hint_font.render(hint_text, True, (170, 170, 170))
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
 
     def flip(self) -> None:

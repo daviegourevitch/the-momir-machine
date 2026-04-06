@@ -200,12 +200,12 @@
       "quick_options": [
         {
           "id": "single_sided",
-          "label": "Single sided only",
+          "label": "Disabled",
           "values": { "double_sided": false }
         },
         {
           "id": "double_sided",
-          "label": "Allow double sided",
+          "label": "Enabled",
           "values": { "double_sided": true }
         }
       ]
