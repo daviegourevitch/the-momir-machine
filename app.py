@@ -270,10 +270,17 @@ class MomirApp:
                 break
 
     def _save_settings_if_valid(self) -> None:
+        self.is_loading = True
+        self._drop_pending_actions()
+        self._render()
+        pygame.event.pump()
+
         candidate_settings = self._menu_settings()
         available_values = self.card_service.get_available_mana_values(
             self.settings_schema, candidate_settings
         )
+        self.is_loading = False
+        self._drop_pending_actions()
         if not available_values:
             self._set_status_message("No cards match current filters. Not saved.", 3000)
             print("Settings not saved: no cards match current filters.")
@@ -390,6 +397,7 @@ class MomirApp:
                 current_setting=current_setting,
                 quick_labels=quick_labels,
                 status_message=status_message,
+                is_loading=self.is_loading,
             )
         self.ui.flip()
 

@@ -188,6 +188,7 @@ class UI:
         current_setting: Dict[str, Any],
         quick_labels: Dict[str, str],
         status_message: str | None = None,
+        is_loading: bool = False,
     ) -> None:
         if self.screen is None or self.title_font is None or self.menu_font is None:
             return
@@ -275,6 +276,9 @@ class UI:
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
             if status_message:
                 self._draw_status_banner(status_message)
+
+        if is_loading:
+            self._draw_loading_overlay()
 
     def flip(self) -> None:
         pygame.display.flip()
