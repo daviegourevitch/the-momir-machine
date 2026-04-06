@@ -51,16 +51,17 @@ On recent Debian / Raspberry Pi OS, the system Python is **externally managed** 
    python -c "import lgpio; print('ok')"
    ```
 
-8. Run the app with this venv’s Python:
+8. Run Momir via the launcher script:
 
    ```bash
-   python app.py
+   bash scripts/run-momir.sh
    ```
 
 ## After setup
 
-- **HAT mouse helper vs Momir:** If you use `mouse.py` for desktop pointer control, do not run it at the same time as Momir (same GPIO). Use [`scripts/run-momir.sh`](../scripts/run-momir.sh): it stops the mouse process, runs Momir with `~/momir-venv/bin/python`, then restarts the mouse when Momir exits (`chmod +x` once on the Pi).
+- **HAT mouse helper vs Momir:** `os-scripts/mouse.py` should be launched at login and left running. It automatically enters standby when Momir acquires the runtime lock and resumes when Momir exits. Start Momir via [`scripts/run-momir.sh`](../scripts/run-momir.sh) (or `python app.py`) so lock ownership is handled in-app.
 - **Fullscreen / display:** Run from a graphical session on the Pi (or set `DISPLAY` appropriately) so pygame can open a fullscreen window on the LCD.
 - **GPIO troubleshooting:** If you still see fallback from `lgpio` or edge-detection errors, see [set-up-hat.md](set-up-hat.md) § **Python GPIO (Momir app / gpiozero)**.
 - **Keyboard fallback (dev / no hardware):** With the venv active, `python app.py` still accepts mapped keys when GPIO is unavailable; **Escape** quits.
 - **Force GPIO on non-Linux (advanced):** Set `MOMIR_FORCE_GPIO=1` only if you know you need it; see `input_controller.py`.
+- **Lock path override (advanced):** If needed, set `MOMIR_RUNTIME_LOCK` for both processes to use a custom lock file path.

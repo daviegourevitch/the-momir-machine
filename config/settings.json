@@ -5,7 +5,8 @@
     "sorcery": true,
     "artifact": true,
     "enchantment": true,
-    "planeswalker": true
+    "planeswalker": true,
+    "battle": true
   },
   "roll_behavior": {
     "allow_animations": true,

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Run the Momir app with ~/momir-venv, stopping the Waveshare HAT mouse helper first
-# so GPIO is not shared (see documentation/MOUSE_FROM_SCRATCH.md). Restarts the mouse
-# when Momir exits (normal exit, Ctrl+C, or crash — not SIGKILL).
+# Run the Momir app with ~/momir-venv.
+# The mouse helper is expected to keep running in the background and will
+# automatically enter standby while Momir owns the runtime lock.
 #
 # Usage (from repo root or anywhere):
 #   bash /path/to/The-Momir-Machine/scripts/run-momir.sh
 #
 # Override paths if yours differ:
-#   MOMIR_APP=/path/to/app.py MOUSE_SCRIPT=/path/to/mouse.py MOUSE_PYTHON=~/waveshare-mouse-venv/bin/python bash scripts/run-momir.sh
+#   MOMIR_APP=/path/to/app.py MOMIR_PYTHON=~/momir-venv/bin/python bash scripts/run-momir.sh
 
 set -euo pipefail
 
@@ -15,80 +15,6 @@ MOMIR_PYTHON="${MOMIR_PYTHON:-${HOME}/momir-venv/bin/python}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOMIR_APP="${MOMIR_APP:-${SCRIPT_DIR}/../app.py}"
-
-# Default mouse helper paths from documentation/MOUSE_FROM_SCRATCH.md — change via env if needed.
-MOUSE_PYTHON="${MOUSE_PYTHON:-${HOME}/waveshare-mouse-venv/bin/python}"
-MOUSE_SCRIPT="${MOUSE_SCRIPT:-${HOME}/Code/waveshare-mouse/mouse.py}"
-
-DISPLAY="${DISPLAY:-:0}"
-XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
-
-MOUSE_RESTART="${MOUSE_RESTART:-1}"
-MOUSE_STOP_TIMEOUT_S="${MOUSE_STOP_TIMEOUT_S:-2.0}"
-MOUSE_START_DELAY_S="${MOUSE_START_DELAY_S:-0.35}"
-
-mouse_pids() {
-  if [[ -n "${MOUSE_SCRIPT}" ]] && [[ -f "${MOUSE_SCRIPT}" ]]; then
-    pgrep -f "${MOUSE_SCRIPT}" 2>/dev/null || true
-  else
-    pgrep -f '[ /]mouse\.py' 2>/dev/null || true
-  fi
-}
-
-stop_mouse() {
-  local pids elapsed_s
-  pids="$(mouse_pids)"
-  if [[ -z "${pids}" ]]; then
-    return 0
-  fi
-
-  # Ask mouse.py to exit cleanly so it can release held buttons and GPIO.
-  kill -INT ${pids} 2>/dev/null || true
-
-  elapsed_s=0.0
-  while [[ -n "$(mouse_pids)" ]]; do
-    if awk "BEGIN {exit !(${elapsed_s} >= ${MOUSE_STOP_TIMEOUT_S})}"; then
-      break
-    fi
-    sleep 0.1
-    elapsed_s="$(awk "BEGIN {print ${elapsed_s} + 0.1}")"
-  done
-
-  pids="$(mouse_pids)"
-  if [[ -n "${pids}" ]]; then
-    kill -TERM ${pids} 2>/dev/null || true
-    sleep 0.2
-  fi
-
-  pids="$(mouse_pids)"
-  if [[ -n "${pids}" ]]; then
-    kill -KILL ${pids} 2>/dev/null || true
-  fi
-}
-
-start_mouse() {
-  if [[ "${MOUSE_RESTART}" != "1" ]]; then
-    return 0
-  fi
-  if [[ ! -f "${MOUSE_SCRIPT}" ]]; then
-    echo "run-momir: MOUSE_SCRIPT not found (${MOUSE_SCRIPT}); not restarting mouse." >&2
-    return 0
-  fi
-  if [[ ! -x "${MOUSE_PYTHON}" ]]; then
-    echo "run-momir: MOUSE_PYTHON not executable (${MOUSE_PYTHON}); not restarting mouse." >&2
-    return 0
-  fi
-  nohup env DISPLAY="${DISPLAY}" XAUTHORITY="${XAUTHORITY}" \
-    "${MOUSE_PYTHON}" "${MOUSE_SCRIPT}" >/dev/null 2>&1 &
-  disown 2>/dev/null || true
-}
-
-cleanup() {
-  # Give gpiozero / kernel input a brief moment to close before restart.
-  sleep "${MOUSE_START_DELAY_S}"
-  start_mouse
-}
-trap cleanup EXIT
 
 if [[ ! -x "${MOMIR_PYTHON}" ]]; then
   echo "run-momir: Momir venv Python not found or not executable: ${MOMIR_PYTHON}" >&2
@@ -101,9 +27,4 @@ if [[ ! -f "${MOMIR_APP}" ]]; then
   exit 1
 fi
 
-stop_mouse
-# Brief pause so the OS / drivers release lines before gpiozero opens them.
-sleep 0.25
-
-# Do not use `exec` here — the shell must remain so the EXIT trap can restart the mouse.
 "${MOMIR_PYTHON}" "${MOMIR_APP}" "$@"

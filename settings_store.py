@@ -166,6 +166,7 @@ def fallback_schema() -> List[Dict[str, Any]]:
                         "artifact": True,
                         "enchantment": True,
                         "planeswalker": True,
+                        "battle": True,
                     },
                 }
             ],
@@ -176,6 +177,7 @@ def fallback_schema() -> List[Dict[str, Any]]:
                 {"id": "artifact", "label": "Artifact", "type": "boolean", "default": True},
                 {"id": "enchantment", "label": "Enchantment", "type": "boolean", "default": True},
                 {"id": "planeswalker", "label": "Planeswalker", "type": "boolean", "default": True},
+                {"id": "battle", "label": "Battle", "type": "boolean", "default": True},
             ],
         }
     ]

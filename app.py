@@ -34,6 +34,7 @@ from settings_store import (
     save_settings,
 )
 from ui import UI
+from runtime_coordination import RuntimeLock
 
 
 def printCard(
@@ -63,6 +64,7 @@ class MomirApp:
         self.settings_index = 0
         self.advanced_field_index = 0
         self.in_advanced_mode = False
+        self.runtime_lock = RuntimeLock()
 
     def _inc_mana_index(self) -> None:
         self.mana_index = min(self.mana_index + 1, len(MANA_VALUES) - 1)
@@ -291,10 +293,18 @@ class MomirApp:
         self.ui.flip()
 
     def run(self) -> None:
-        self.ui.setup()
-        self.input.setup_gpio()
-        clock = pygame.time.Clock()
+        if not self.runtime_lock.acquire(blocking=False):
+            print(
+                "Momir is already running (or lock is busy). "
+                "If this is unexpected, remove the stale lock and retry: "
+                f"{self.runtime_lock.path}"
+            )
+            return
+
         try:
+            self.ui.setup()
+            self.input.setup_gpio()
+            clock = pygame.time.Clock()
             while self.running:
                 self._process_pygame_events()
                 self._drain_actions()
@@ -303,6 +313,7 @@ class MomirApp:
         finally:
             self.input.close_gpio()
             self.ui.shutdown()
+            self.runtime_lock.release()
 
 
 if __name__ == "__main__":

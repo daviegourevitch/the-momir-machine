@@ -3,6 +3,50 @@
     {
       "id": "card_type",
       "label": "Card Type",
+      "advanced_fields": [
+        {
+          "id": "creature",
+          "label": "Creature",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "instant",
+          "label": "Instant",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "sorcery",
+          "label": "Sorcery",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "artifact",
+          "label": "Artifact",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "enchantment",
+          "label": "Enchantment",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "planeswalker",
+          "label": "Planeswalker",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "battle",
+          "label": "Battle",
+          "type": "boolean",
+          "default": true
+        }
+      ],
       "quick_options": [
         {
           "id": "creatures_only",
@@ -13,7 +57,8 @@
             "sorcery": false,
             "artifact": false,
             "enchantment": false,
-            "planeswalker": false
+            "planeswalker": false,
+            "battle": false
           }
         },
         {
@@ -25,7 +70,8 @@
             "sorcery": false,
             "artifact": true,
             "enchantment": true,
-            "planeswalker": true
+            "planeswalker": true,
+            "battle": true
           }
         },
         {
@@ -37,60 +83,130 @@
             "sorcery": true,
             "artifact": true,
             "enchantment": true,
-            "planeswalker": true
+            "planeswalker": true,
+            "battle": true
           }
         }
-      ],
-      "advanced_fields": [
-        { "id": "creature", "label": "Creature", "type": "boolean", "default": true },
-        { "id": "instant", "label": "Instant", "type": "boolean", "default": true },
-        { "id": "sorcery", "label": "Sorcery", "type": "boolean", "default": true },
-        { "id": "artifact", "label": "Artifact", "type": "boolean", "default": true },
-        { "id": "enchantment", "label": "Enchantment", "type": "boolean", "default": true },
-        { "id": "planeswalker", "label": "Planeswalker", "type": "boolean", "default": true }
       ]
     },
     {
-      "id": "roll_behavior",
-      "label": "Roll Behavior",
-      "quick_options": [
+      "id": "format",
+      "label": "Format",
+      "advanced_fields": [
         {
-          "id": "default",
-          "label": "Default",
-          "values": {
-            "allow_animations": true,
-            "reroll_limit": 1,
-            "source_pool": "main"
-          }
-        },
-        {
-          "id": "fast",
-          "label": "Fast",
-          "values": {
-            "allow_animations": false,
-            "reroll_limit": 0,
-            "source_pool": "main"
-          }
-        },
-        {
-          "id": "explorer",
-          "label": "Explorer",
-          "values": {
-            "allow_animations": true,
-            "reroll_limit": 2,
-            "source_pool": "extended"
-          }
+          "id": "format",
+          "label": "Format",
+          "type": "string",
+          "default": "vintage",
+          "options": [
+            "standard",
+            "pioneer",
+            "modern",
+            "vintage",
+            "pauper",
+            "pre_modern"
+          ]
         }
       ],
-      "advanced_fields": [
-        { "id": "allow_animations", "label": "Allow Animations", "type": "boolean", "default": true },
-        { "id": "reroll_limit", "label": "Reroll Limit", "type": "number", "default": 1, "step": 1 },
+      "quick_options": [
         {
-          "id": "source_pool",
-          "label": "Source Pool",
-          "type": "string",
-          "default": "main",
-          "options": ["main", "extended", "legacy"]
+          "id": "standard",
+          "label": "Standard",
+          "values": { "format": "standard" }
+        },
+        {
+          "id": "pioneer",
+          "label": "Pioneer",
+          "values": { "format": "pioneer" }
+        },
+        { "id": "modern", "label": "Modern", "values": { "format": "modern" } },
+        {
+          "id": "vintage",
+          "label": "Vintage",
+          "values": { "format": "vintage" }
+        },
+        { "id": "pauper", "label": "Pauper", "values": { "format": "pauper" } },
+        {
+          "id": "pre_modern",
+          "label": "Pre-modern",
+          "values": { "format": "pre_modern" }
+        }
+      ]
+    },
+    {
+      "id": "comedy",
+      "label": "Comedy",
+      "advanced_fields": [
+        {
+          "id": "not_funny",
+          "label": "Not funny",
+          "type": "boolean",
+          "default": true
+        },
+        {
+          "id": "silver_border",
+          "label": "Silver bordered cards",
+          "type": "boolean",
+          "default": false
+        },
+        {
+          "id": "non_silver_funny",
+          "label": "Non-silver funny cards",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "quick_options": [
+        {
+          "id": "not_funny",
+          "label": "Only non-funny",
+          "values": {
+            "not_funny": true,
+            "silver_border": false,
+            "non_silver_funny": false
+          }
+        },
+        {
+          "id": "all_cards",
+          "label": "All cards",
+          "values": {
+            "not_funny": true,
+            "silver_border": true,
+            "non_silver_funny": true
+          }
+        },
+        {
+          "id": "only_funny",
+          "label": "Only funny",
+          "values": {
+            "not_funny": false,
+            "silver_border": true,
+            "non_silver_funny": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "double_sided",
+      "label": "Double Sided Cards",
+      "advanced_fields": [
+        {
+          "id": "double_sided",
+          "label": "Double Sided Cards",
+          "type": "boolean",
+          "default": false
+        }
+      ],
+      "quick_options": [
+        {
+          "id": "single_sided",
+          "label": "Single sided only",
+          "values": { "double_sided": false }
+        },
+        {
+          "id": "double_sided",
+          "label": "Allow double sided",
+          "values": { "double_sided": true }
         }
       ]
     }
