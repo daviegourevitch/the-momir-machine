@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+from copy import deepcopy
 from typing import Any, Dict, Optional
 
 import pygame
@@ -54,6 +55,7 @@ class MomirApp:
         self.settings = load_settings(
             SETTINGS_PATH, self.default_settings, self.settings_schema
         )
+        self.edit_settings: Optional[Dict[str, Dict[str, bool | int | float | str]]] = None
         self.card_service = CardService(CARD_DB_PATH)
         self.mana_pool = RuntimeManaPool(MANA_VALUES)
 
@@ -101,7 +103,12 @@ class MomirApp:
         if not setting:
             return {}
         setting_id = str(setting.get("id", ""))
-        return self.settings.setdefault(setting_id, {})
+        return self._menu_settings().setdefault(setting_id, {})
+
+    def _menu_settings(self) -> Dict[str, Dict[str, bool | int | float | str]]:
+        if self.edit_settings is not None:
+            return self.edit_settings
+        return self.settings
 
     def _current_advanced_field(self) -> Dict[str, Any]:
         setting = self._current_setting()
@@ -126,6 +133,7 @@ class MomirApp:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
         self.popup_message = None
+        self.edit_settings = deepcopy(self.settings)
 
     def _move_selection(self, delta: int) -> None:
         if self.in_advanced_mode:
@@ -226,6 +234,7 @@ class MomirApp:
         if self.in_advanced_mode:
             self.in_advanced_mode = False
             return
+        self.edit_settings = None
         self.state = STATE_MAIN_MENU
 
     def _set_status_message(self, text: str, duration_ms: int = 2200) -> None:
@@ -261,8 +270,9 @@ class MomirApp:
                 break
 
     def _save_settings_if_valid(self) -> None:
+        candidate_settings = self._menu_settings()
         available_values = self.card_service.get_available_mana_values(
-            self.settings_schema, self.settings
+            self.settings_schema, candidate_settings
         )
         if not available_values:
             self._set_status_message("No cards match current filters. Not saved.", 3000)
@@ -271,7 +281,9 @@ class MomirApp:
 
         previous_mana = self._current_mana_value()
         self.mana_pool.set_values(available_values, preferred_value=previous_mana)
+        self.settings = deepcopy(candidate_settings)
         save_settings(SETTINGS_PATH, self.settings)
+        self.edit_settings = deepcopy(self.settings)
         self._set_status_message(
             f"Settings saved. {len(available_values)} mana values available.", 2600
         )
@@ -363,15 +375,16 @@ class MomirApp:
             )
         else:
             current_setting = self._current_setting()
+            menu_settings = self._menu_settings()
             quick_labels: Dict[str, str] = {}
             for setting in self.settings_schema:
                 setting_id = str(setting.get("id", ""))
-                values = self.settings.get(setting_id, {})
+                values = menu_settings.get(setting_id, {})
                 quick_labels[setting_id] = quick_option_label(setting, values)
             self.ui.draw_settings_menu(
                 settings_schema=self.settings_schema,
                 selected_setting=self.settings_index,
-                settings=self.settings,
+                settings=menu_settings,
                 in_advanced_mode=self.in_advanced_mode,
                 selected_field=self.advanced_field_index,
                 current_setting=current_setting,
