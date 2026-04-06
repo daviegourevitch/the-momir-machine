@@ -1,41 +1,96 @@
 {
-  "menu": [
+  "settings": [
     {
-      "id": "allow_animations",
-      "label": "Allow Animations",
-      "default": true
-    },
-    {
-      "id": "audio",
-      "label": "Audio",
-      "default": true,
-      "submenu": [
+      "id": "card_type",
+      "label": "Card Type",
+      "quick_options": [
         {
-          "id": "music_enabled",
-          "label": "Music Enabled",
-          "default": true
+          "id": "creatures_only",
+          "label": "Creatures only",
+          "values": {
+            "creature": true,
+            "instant": false,
+            "sorcery": false,
+            "artifact": false,
+            "enchantment": false,
+            "planeswalker": false
+          }
         },
         {
-          "id": "sfx_enabled",
-          "label": "SFX Enabled",
-          "default": true
+          "id": "permanents_only",
+          "label": "Permanents only",
+          "values": {
+            "creature": true,
+            "instant": false,
+            "sorcery": false,
+            "artifact": true,
+            "enchantment": true,
+            "planeswalker": true
+          }
+        },
+        {
+          "id": "all_cards",
+          "label": "All cards",
+          "values": {
+            "creature": true,
+            "instant": true,
+            "sorcery": true,
+            "artifact": true,
+            "enchantment": true,
+            "planeswalker": true
+          }
         }
+      ],
+      "advanced_fields": [
+        { "id": "creature", "label": "Creature", "type": "boolean", "default": true },
+        { "id": "instant", "label": "Instant", "type": "boolean", "default": true },
+        { "id": "sorcery", "label": "Sorcery", "type": "boolean", "default": true },
+        { "id": "artifact", "label": "Artifact", "type": "boolean", "default": true },
+        { "id": "enchantment", "label": "Enchantment", "type": "boolean", "default": true },
+        { "id": "planeswalker", "label": "Planeswalker", "type": "boolean", "default": true }
       ]
     },
     {
-      "id": "gameplay",
-      "label": "Gameplay",
-      "default": true,
-      "submenu": [
+      "id": "roll_behavior",
+      "label": "Roll Behavior",
+      "quick_options": [
         {
-          "id": "randomize_seeds",
-          "label": "Randomize Seeds",
-          "default": false
+          "id": "default",
+          "label": "Default",
+          "values": {
+            "allow_animations": true,
+            "reroll_limit": 1,
+            "source_pool": "main"
+          }
         },
         {
-          "id": "show_debug_overlay",
-          "label": "Show Debug Overlay",
-          "default": false
+          "id": "fast",
+          "label": "Fast",
+          "values": {
+            "allow_animations": false,
+            "reroll_limit": 0,
+            "source_pool": "main"
+          }
+        },
+        {
+          "id": "explorer",
+          "label": "Explorer",
+          "values": {
+            "allow_animations": true,
+            "reroll_limit": 2,
+            "source_pool": "extended"
+          }
+        }
+      ],
+      "advanced_fields": [
+        { "id": "allow_animations", "label": "Allow Animations", "type": "boolean", "default": true },
+        { "id": "reroll_limit", "label": "Reroll Limit", "type": "number", "default": 1, "step": 1 },
+        {
+          "id": "source_pool",
+          "label": "Source Pool",
+          "type": "string",
+          "default": "main",
+          "options": ["main", "extended", "legacy"]
         }
       ]
     }

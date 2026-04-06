@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pygame
 
-from constants import BACKGROUND_PATH, SCREEN_HEIGHT, SCREEN_WIDTH, TOP_BANNER_HEIGHT
+from constants import (
+    BACKGROUND_PATH,
+    BELEREN_FONT_PATH,
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    TOP_BANNER_HEIGHT,
+)
 from mana_icons import scaled_mana_icon
 
 
@@ -22,6 +28,8 @@ class UI:
         self.banner_label_font: Optional[pygame.font.Font] = None
         self.menu_font: Optional[pygame.font.Font] = None
         self.hint_font: Optional[pygame.font.Font] = None
+        self.main_menu_label_font: Optional[pygame.font.Font] = None
+        self.main_menu_value_font: Optional[pygame.font.Font] = None
 
     def setup(self) -> None:
         pygame.init()
@@ -32,6 +40,12 @@ class UI:
         self.banner_label_font = pygame.font.Font(None, 17)
         self.menu_font = pygame.font.Font(None, 20)
         self.hint_font = pygame.font.Font(None, 16)
+        if BELEREN_FONT_PATH.is_file():
+            self.main_menu_label_font = pygame.font.Font(str(BELEREN_FONT_PATH), 17)
+            self.main_menu_value_font = pygame.font.Font(str(BELEREN_FONT_PATH), 24)
+        else:
+            self.main_menu_label_font = pygame.font.Font(None, 17)
+            self.main_menu_value_font = pygame.font.Font(None, 24)
         self._load_background()
 
     def _load_background(self) -> None:
@@ -47,8 +61,12 @@ class UI:
         self.background_surface = pygame.transform.smoothscale(image, (width, height))
         self.background_y = SCREEN_HEIGHT - self.background_surface.get_height()
 
-    def draw_main_menu(self, mana_value: int) -> None:
-        if self.screen is None or self.banner_label_font is None:
+    def draw_main_menu(self, mana_value: Union[int, float]) -> None:
+        if self.screen is None:
+            return
+        label_font = self.main_menu_label_font or self.banner_label_font
+        value_font = self.main_menu_value_font or self.title_font
+        if label_font is None:
             return
         self.screen.fill((0, 0, 0))
         if self.background_surface is not None:
@@ -56,7 +74,7 @@ class UI:
 
         pygame.draw.rect(self.screen, (0, 0, 0), (0, 0, SCREEN_WIDTH, TOP_BANNER_HEIGHT))
 
-        label = self.banner_label_font.render("Current mana value", True, (255, 255, 255))
+        label = label_font.render("Current mana value", True, (255, 255, 255))
         label_y = (TOP_BANNER_HEIGHT - label.get_height()) // 2
         self.screen.blit(label, (BANNER_PAD_X, label_y))
 
@@ -69,54 +87,95 @@ class UI:
             icon_x = SCREEN_WIDTH - BANNER_PAD_X - icon.get_width()
             icon_y = (TOP_BANNER_HEIGHT - icon.get_height()) // 2
             self.screen.blit(icon, (icon_x, icon_y))
-        elif self.title_font is not None:
-            value_text = self.title_font.render(str(mana_value), True, (255, 255, 255))
+        elif value_font is not None:
+            value_text = value_font.render(str(mana_value), True, (255, 255, 255))
             value_x = SCREEN_WIDTH - BANNER_PAD_X - value_text.get_width()
             value_y = (TOP_BANNER_HEIGHT - value_text.get_height()) // 2
             self.screen.blit(value_text, (value_x, value_y))
 
     def draw_settings_menu(
         self,
-        items: List[Dict[str, Any]],
-        selected: int,
-        current_path: str,
-        settings: Dict[str, bool],
-        current_key_fn: Any,
+        settings_schema: List[Dict[str, Any]],
+        selected_setting: int,
+        settings: Dict[str, Dict[str, bool | int | float | str]],
+        in_advanced_mode: bool,
+        selected_field: int,
+        current_setting: Dict[str, Any],
+        quick_labels: Dict[str, str],
     ) -> None:
         if self.screen is None or self.title_font is None or self.menu_font is None:
             return
         self.screen.fill((10, 10, 10))
 
-        title = self.title_font.render(f"Settings: {current_path}", True, (230, 230, 230))
+        title_text = "Settings" if not in_advanced_mode else f"Advanced: {current_setting.get('label', '')}"
+        title = self.title_font.render(title_text, True, (230, 230, 230))
         self.screen.blit(title, (8, 8))
-
-        if not items:
-            empty_text = self.menu_font.render("No menu items", True, (220, 220, 220))
-            self.screen.blit(empty_text, (8, 50))
-            return
 
         row_height = 22
         top_y = 38
         max_rows = max(1, (SCREEN_HEIGHT - top_y - 24) // row_height)
-        start = max(0, min(selected - max_rows + 1, len(items) - max_rows))
-        end = min(len(items), start + max_rows)
+
+        if in_advanced_mode:
+            fields = current_setting.get("advanced_fields", [])
+            setting_id = str(current_setting.get("id", ""))
+            setting_values = settings.get(setting_id, {})
+            if not isinstance(fields, list) or not fields:
+                empty_text = self.menu_font.render("No advanced fields", True, (220, 220, 220))
+                self.screen.blit(empty_text, (8, 50))
+                return
+
+            selected_field = max(0, min(selected_field, len(fields) - 1))
+            start = max(0, min(selected_field - max_rows + 1, len(fields) - max_rows))
+            end = min(len(fields), start + max_rows)
+
+            for row, idx in enumerate(range(start, end)):
+                field = fields[idx]
+                y = top_y + row * row_height
+                is_selected = idx == selected_field
+                if is_selected:
+                    pygame.draw.rect(self.screen, (70, 70, 70), (4, y - 2, SCREEN_WIDTH - 8, row_height))
+
+                field_id = str(field.get("id", ""))
+                label = str(field.get("label", field_id))
+                value = setting_values.get(field_id, field.get("default"))
+                if isinstance(value, bool):
+                    value_text = "ON" if value else "OFF"
+                else:
+                    value_text = str(value)
+                line = f"{label}: {value_text}"
+                text_surface = self.menu_font.render(line, True, (255, 255, 255))
+                self.screen.blit(text_surface, (8, y))
+
+            if self.hint_font is not None:
+                hint = self.hint_font.render("L/R change  K2/JOY back  K3 save", True, (170, 170, 170))
+                self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
+            return
+
+        if not settings_schema:
+            empty_text = self.menu_font.render("No menu items", True, (220, 220, 220))
+            self.screen.blit(empty_text, (8, 50))
+            return
+
+        selected_setting = max(0, min(selected_setting, len(settings_schema) - 1))
+        start = max(0, min(selected_setting - max_rows + 1, len(settings_schema) - max_rows))
+        end = min(len(settings_schema), start + max_rows)
 
         for row, idx in enumerate(range(start, end)):
-            item = items[idx]
+            item = settings_schema[idx]
             y = top_y + row * row_height
-            is_selected = idx == selected
+            is_selected = idx == selected_setting
             if is_selected:
                 pygame.draw.rect(self.screen, (70, 70, 70), (4, y - 2, SCREEN_WIDTH - 8, row_height))
 
-            key = current_key_fn(item)
-            value = "ON" if settings.get(key, False) else "OFF"
-            suffix = " >" if isinstance(item.get("submenu"), list) and item.get("submenu") else ""
-            line = f"{item['label']}: {value}{suffix}"
+            setting_id = str(item.get("id", ""))
+            label = str(item.get("label", setting_id))
+            quick_label = quick_labels.get(setting_id, "Custom")
+            line = f"{label}: {quick_label} >"
             text_surface = self.menu_font.render(line, True, (255, 255, 255))
             self.screen.blit(text_surface, (8, y))
 
         if self.hint_font is not None:
-            hint = self.hint_font.render("K1 open  K2/JOY back  K3 save", True, (170, 170, 170))
+            hint = self.hint_font.render("L/R quick  K1 advanced  K2/JOY back  K3 save", True, (170, 170, 170))
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
 
     def flip(self) -> None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import queue
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pygame
 
@@ -18,10 +18,7 @@ from constants import (
     ACTION_ROTARY_CW,
     ACTION_UP,
     ALL_HAT_ACTIONS,
-    MANA_JUMP_THRESHOLD,
-    MANA_JUMP_VALUE,
-    MANA_MAX,
-    MANA_MIN,
+    MANA_VALUES,
     MENU_SCHEMA_PATH,
     SETTINGS_PATH,
     STATE_MAIN_MENU,
@@ -32,12 +29,16 @@ from settings_store import (
     build_default_settings,
     load_menu_schema,
     load_settings,
+    quick_option_index,
+    quick_option_label,
     save_settings,
 )
 from ui import UI
 
 
-def printCard(mana_value: int, settings: Dict[str, bool]) -> None:
+def printCard(
+    mana_value: int | float, settings: Dict[str, Dict[str, bool | int | float | str]]
+) -> None:
     # Keep settings accessible for future expansion.
     _ = settings
     print(f"Chose mana value {mana_value}")
@@ -47,103 +48,165 @@ class MomirApp:
     def __init__(self) -> None:
         self.running = True
         self.state = STATE_MAIN_MENU
-        self.mana_value = 0
+        self.mana_index = 0
 
         self.action_queue: "queue.SimpleQueue[str]" = queue.SimpleQueue()
         self.input = InputController(self.action_queue)
         self.ui = UI()
 
-        self.menu_tree = load_menu_schema(MENU_SCHEMA_PATH)
-        self.default_settings = build_default_settings(self.menu_tree)
-        self.settings = load_settings(SETTINGS_PATH, self.default_settings)
+        self.settings_schema = load_menu_schema(MENU_SCHEMA_PATH)
+        self.default_settings = build_default_settings(self.settings_schema)
+        self.settings = load_settings(
+            SETTINGS_PATH, self.default_settings, self.settings_schema
+        )
 
-        self.menu_stack: List[List[Dict[str, Any]]] = [self.menu_tree]
-        self.selection_stack: List[int] = [0]
-        self.prefix_stack: List[str] = [""]
+        self.settings_index = 0
+        self.advanced_field_index = 0
+        self.in_advanced_mode = False
 
-    def _clamp_mana(self) -> None:
-        self.mana_value = max(MANA_MIN, min(self.mana_value, MANA_MAX))
+    def _inc_mana_index(self) -> None:
+        self.mana_index = min(self.mana_index + 1, len(MANA_VALUES) - 1)
 
-    def _inc_mana(self) -> None:
-        self._clamp_mana()
-        if self.mana_value >= MANA_MAX:
-            return
-        if self.mana_value == MANA_JUMP_THRESHOLD:
-            self.mana_value = MANA_JUMP_VALUE
-        else:
-            self.mana_value += 1
-        self._clamp_mana()
+    def _dec_mana_index(self) -> None:
+        self.mana_index = max(self.mana_index - 1, 0)
 
-    def _dec_mana(self) -> None:
-        self._clamp_mana()
-        if self.mana_value == MANA_JUMP_VALUE:
-            self.mana_value = MANA_JUMP_THRESHOLD
-        else:
-            self.mana_value = max(MANA_MIN, self.mana_value - 1)
-        self._clamp_mana()
-
-    def _current_menu(self) -> List[Dict[str, Any]]:
-        return self.menu_stack[-1]
-
-    def _current_index(self) -> int:
-        return self.selection_stack[-1]
-
-    def _current_item(self) -> Dict[str, Any]:
-        menu = self._current_menu()
-        if not menu:
+    def _current_setting(self) -> Dict[str, Any]:
+        if not self.settings_schema:
             return {}
-        idx = max(0, min(self._current_index(), len(menu) - 1))
-        self.selection_stack[-1] = idx
-        return menu[idx]
+        idx = max(0, min(self.settings_index, len(self.settings_schema) - 1))
+        self.settings_index = idx
+        return self.settings_schema[idx]
 
-    def _current_key(self, item: Dict[str, Any]) -> str:
-        prefix = self.prefix_stack[-1]
-        item_id = str(item.get("id", ""))
-        return f"{prefix}.{item_id}" if prefix else item_id
+    def _current_setting_values(self) -> Dict[str, bool | int | float | str]:
+        setting = self._current_setting()
+        if not setting:
+            return {}
+        setting_id = str(setting.get("id", ""))
+        return self.settings.setdefault(setting_id, {})
+
+    def _current_advanced_field(self) -> Dict[str, Any]:
+        setting = self._current_setting()
+        fields = setting.get("advanced_fields", [])
+        if not isinstance(fields, list) or not fields:
+            return {}
+        idx = max(0, min(self.advanced_field_index, len(fields) - 1))
+        self.advanced_field_index = idx
+        return fields[idx]
 
     def _open_settings(self) -> None:
         self.state = STATE_SETTINGS_MENU
+        self.in_advanced_mode = False
 
     def _move_selection(self, delta: int) -> None:
-        menu = self._current_menu()
-        if not menu:
+        if self.in_advanced_mode:
+            fields = self._current_setting().get("advanced_fields", [])
+            if not isinstance(fields, list) or not fields:
+                return
+            self.advanced_field_index = (self.advanced_field_index + delta) % len(fields)
             return
-        idx = (self._current_index() + delta) % len(menu)
-        self.selection_stack[-1] = idx
 
-    def _toggle_selected(self) -> None:
-        item = self._current_item()
-        if not item:
+        if not self.settings_schema:
             return
-        key = self._current_key(item)
-        current = bool(self.settings.get(key, False))
-        self.settings[key] = not current
+        self.settings_index = (self.settings_index + delta) % len(self.settings_schema)
+
+    @staticmethod
+    def _is_number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    def _cycle_quick_option(self, delta: int) -> None:
+        setting = self._current_setting()
+        if not setting:
+            return
+        quick_options = setting.get("quick_options", [])
+        if not isinstance(quick_options, list) or not quick_options:
+            return
+
+        values = self._current_setting_values()
+        idx = quick_option_index(setting, values)
+        if idx < 0:
+            idx = 0 if delta > 0 else len(quick_options) - 1
+        else:
+            idx = (idx + delta) % len(quick_options)
+
+        option_values = quick_options[idx].get("values", {})
+        if not isinstance(option_values, dict):
+            return
+        for field_id, value in option_values.items():
+            values[str(field_id)] = value
+
+    def _adjust_advanced_value(self, delta: int) -> None:
+        field = self._current_advanced_field()
+        if not field:
+            return
+
+        field_id = str(field["id"])
+        values = self._current_setting_values()
+        current_value = values.get(field_id, field.get("default"))
+        field_type = str(field.get("type", ""))
+
+        if field_type == "boolean":
+            values[field_id] = not bool(current_value)
+            return
+
+        if field_type == "number":
+            step = field.get("step", 1)
+            if not self._is_number(step) or step == 0:
+                step = 1
+            if not self._is_number(current_value):
+                current_value = field.get("default", 0)
+            if not self._is_number(current_value):
+                current_value = 0
+
+            next_value = current_value + (step if delta > 0 else -step)
+            default_value = field.get("default")
+            if (
+                isinstance(default_value, int)
+                and not isinstance(default_value, bool)
+                and float(step).is_integer()
+                and float(next_value).is_integer()
+            ):
+                values[field_id] = int(next_value)
+            else:
+                values[field_id] = next_value
+            return
+
+        if field_type == "string":
+            options = field.get("options", [])
+            if not isinstance(options, list) or not options:
+                return
+            clean_options = [opt for opt in options if isinstance(opt, str)]
+            if not clean_options:
+                return
+            current_str = str(current_value) if isinstance(current_value, str) else None
+            if current_str not in clean_options:
+                idx = 0 if delta > 0 else len(clean_options) - 1
+            else:
+                idx = clean_options.index(current_str)
+                idx = (idx + (1 if delta > 0 else -1)) % len(clean_options)
+            values[field_id] = clean_options[idx]
 
     def _enter_submenu(self) -> None:
-        item = self._current_item()
-        submenu = item.get("submenu")
-        if not isinstance(submenu, list) or not submenu:
+        setting = self._current_setting()
+        fields = setting.get("advanced_fields", [])
+        if not isinstance(fields, list) or not fields:
             return
-        self.menu_stack.append(submenu)
-        self.selection_stack.append(0)
-        self.prefix_stack.append(self._current_key(item))
+        self.in_advanced_mode = True
+        self.advanced_field_index = 0
 
     def _back(self) -> None:
-        if len(self.menu_stack) > 1:
-            self.menu_stack.pop()
-            self.selection_stack.pop()
-            self.prefix_stack.pop()
+        if self.in_advanced_mode:
+            self.in_advanced_mode = False
             return
         self.state = STATE_MAIN_MENU
 
     def _handle_action(self, action: str) -> None:
         if self.state == STATE_MAIN_MENU:
             if action == ACTION_ROTARY_CW:
-                self._inc_mana()
+                self._inc_mana_index()
             elif action == ACTION_ROTARY_CCW:
-                self._dec_mana()
+                self._dec_mana_index()
             elif action == ACTION_KNOB_PRESS:
-                printCard(self.mana_value, self.settings)
+                printCard(MANA_VALUES[self.mana_index], self.settings)
             elif action in ALL_HAT_ACTIONS:
                 self._open_settings()
             return
@@ -153,8 +216,16 @@ class MomirApp:
                 self._move_selection(-1)
             elif action == ACTION_DOWN:
                 self._move_selection(1)
-            elif action in (ACTION_LEFT, ACTION_RIGHT):
-                self._toggle_selected()
+            elif action == ACTION_LEFT:
+                if self.in_advanced_mode:
+                    self._adjust_advanced_value(-1)
+                else:
+                    self._cycle_quick_option(-1)
+            elif action == ACTION_RIGHT:
+                if self.in_advanced_mode:
+                    self._adjust_advanced_value(1)
+                else:
+                    self._cycle_quick_option(1)
             elif action == ACTION_KEY1:
                 self._enter_submenu()
             elif action in (ACTION_KEY2, ACTION_JOY_PRESS):
@@ -200,15 +271,22 @@ class MomirApp:
 
     def _render(self) -> None:
         if self.state == STATE_MAIN_MENU:
-            self.ui.draw_main_menu(self.mana_value)
+            self.ui.draw_main_menu(MANA_VALUES[self.mana_index])
         else:
-            current_path = self.prefix_stack[-1] if self.prefix_stack[-1] else "root"
+            current_setting = self._current_setting()
+            quick_labels: Dict[str, str] = {}
+            for setting in self.settings_schema:
+                setting_id = str(setting.get("id", ""))
+                values = self.settings.get(setting_id, {})
+                quick_labels[setting_id] = quick_option_label(setting, values)
             self.ui.draw_settings_menu(
-                items=self._current_menu(),
-                selected=self._current_index(),
-                current_path=current_path,
+                settings_schema=self.settings_schema,
+                selected_setting=self.settings_index,
                 settings=self.settings,
-                current_key_fn=self._current_key,
+                in_advanced_mode=self.in_advanced_mode,
+                selected_field=self.advanced_field_index,
+                current_setting=current_setting,
+                quick_labels=quick_labels,
             )
         self.ui.flip()
 

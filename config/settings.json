@@ -1,9 +1,15 @@
 {
-  "allow_animations": true,
-  "audio": true,
-  "audio.music_enabled": true,
-  "audio.sfx_enabled": true,
-  "gameplay": true,
-  "gameplay.randomize_seeds": false,
-  "gameplay.show_debug_overlay": false
+  "card_type": {
+    "creature": true,
+    "instant": true,
+    "sorcery": true,
+    "artifact": true,
+    "enchantment": true,
+    "planeswalker": true
+  },
+  "roll_behavior": {
+    "allow_animations": true,
+    "reroll_limit": 1,
+    "source_pool": "main"
+  }
 }
