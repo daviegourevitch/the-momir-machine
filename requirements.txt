@@ -5,3 +5,4 @@ gpiozero>=2.0.1
 # Raspberry Pi: install lgpio for Python via apt (not pip — pip often builds from source and
 # needs swig + dev headers). See documentation/set-up-hat.md § Python GPIO.
 cairosvg>=2.7.0
+ijson>=3.3.0

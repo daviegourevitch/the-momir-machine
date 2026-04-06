@@ -65,3 +65,23 @@ On recent Debian / Raspberry Pi OS, the system Python is **externally managed** 
 - **Keyboard fallback (dev / no hardware):** With the venv active, `python app.py` still accepts mapped keys when GPIO is unavailable; **Escape** quits.
 - **Force GPIO on non-Linux (advanced):** Set `MOMIR_FORCE_GPIO=1` only if you know you need it; see `input_controller.py`.
 - **Lock path override (advanced):** If needed, set `MOMIR_RUNTIME_LOCK` for both processes to use a custom lock file path.
+
+## Fetch Scryfall database
+
+Use the root script `fetch-db` to build a local SQLite card database from Scryfall `oracle_cards`.
+
+```bash
+python fetch-db
+```
+
+Optional flags:
+
+```bash
+python fetch-db --db-path data/scryfall/cards.db --batch-size 1000 --remove-download
+```
+
+What it does:
+- fetches `https://api.scryfall.com/bulk-data`
+- selects the entry where `type == "oracle_cards"`
+- downloads the gzip JSON payload
+- imports card data into SQLite with low-memory streaming parsing
