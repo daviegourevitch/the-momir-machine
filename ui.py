@@ -31,6 +31,46 @@ class UI:
         self.main_menu_label_font: Optional[pygame.font.Font] = None
         self.main_menu_value_font: Optional[pygame.font.Font] = None
 
+    def _draw_status_banner(self, text: str) -> None:
+        if self.screen is None or self.hint_font is None:
+            return
+        pad_x = 6
+        pad_y = 3
+        text_surface = self.hint_font.render(text, True, (255, 255, 255))
+        width = min(SCREEN_WIDTH - 8, text_surface.get_width() + pad_x * 2)
+        rect = pygame.Rect(4, SCREEN_HEIGHT - 36, width, text_surface.get_height() + pad_y * 2)
+        pygame.draw.rect(self.screen, (120, 30, 30), rect)
+        self.screen.blit(text_surface, (rect.x + pad_x, rect.y + pad_y))
+
+    def _draw_popup(self, text: str) -> None:
+        if self.screen is None:
+            return
+        title_font = self.title_font or self.menu_font
+        body_font = self.menu_font or self.hint_font
+        if title_font is None or body_font is None:
+            return
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        self.screen.blit(overlay, (0, 0))
+
+        box_width = SCREEN_WIDTH - 26
+        box_height = 96
+        box_x = (SCREEN_WIDTH - box_width) // 2
+        box_y = (SCREEN_HEIGHT - box_height) // 2
+        pygame.draw.rect(self.screen, (28, 28, 28), (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(self.screen, (220, 220, 220), (box_x, box_y, box_width, box_height), 1)
+
+        heading = title_font.render("Random Card", True, (255, 255, 255))
+        self.screen.blit(heading, (box_x + 8, box_y + 8))
+
+        body = body_font.render(text, True, (255, 255, 255))
+        self.screen.blit(body, (box_x + 8, box_y + 40))
+
+        if self.hint_font is not None:
+            dismiss = self.hint_font.render("Press knob to dismiss", True, (200, 200, 200))
+            self.screen.blit(dismiss, (box_x + 8, box_y + box_height - 20))
+
     def setup(self) -> None:
         pygame.init()
         pygame.display.set_caption("Momir Machine")
@@ -61,7 +101,12 @@ class UI:
         self.background_surface = pygame.transform.smoothscale(image, (width, height))
         self.background_y = SCREEN_HEIGHT - self.background_surface.get_height()
 
-    def draw_main_menu(self, mana_value: Union[int, float]) -> None:
+    def draw_main_menu(
+        self,
+        mana_value: Union[int, float],
+        popup_message: str | None = None,
+        status_message: str | None = None,
+    ) -> None:
         if self.screen is None:
             return
         label_font = self.main_menu_label_font or self.banner_label_font
@@ -93,6 +138,11 @@ class UI:
             value_y = (TOP_BANNER_HEIGHT - value_text.get_height()) // 2
             self.screen.blit(value_text, (value_x, value_y))
 
+        if status_message:
+            self._draw_status_banner(status_message)
+        if popup_message:
+            self._draw_popup(popup_message)
+
     def draw_settings_menu(
         self,
         settings_schema: List[Dict[str, Any]],
@@ -102,6 +152,7 @@ class UI:
         selected_field: int,
         current_setting: Dict[str, Any],
         quick_labels: Dict[str, str],
+        status_message: str | None = None,
     ) -> None:
         if self.screen is None or self.title_font is None or self.menu_font is None:
             return
@@ -149,6 +200,8 @@ class UI:
             if self.hint_font is not None:
                 hint = self.hint_font.render("L/R change  K2/JOY back  K3 save", True, (170, 170, 170))
                 self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
+                if status_message:
+                    self._draw_status_banner(status_message)
             return
 
         if not settings_schema:
@@ -185,6 +238,8 @@ class UI:
             )
             hint = self.hint_font.render(hint_text, True, (170, 170, 170))
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
+            if status_message:
+                self._draw_status_banner(status_message)
 
     def flip(self) -> None:
         pygame.display.flip()

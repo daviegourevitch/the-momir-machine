@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 import pygame
 
+from card_service import CardService
 from constants import (
     ACTION_DOWN,
     ACTION_JOY_PRESS,
@@ -18,6 +19,7 @@ from constants import (
     ACTION_ROTARY_CW,
     ACTION_UP,
     ALL_HAT_ACTIONS,
+    CARD_DB_PATH,
     MANA_VALUES,
     MENU_SCHEMA_PATH,
     SETTINGS_PATH,
@@ -25,6 +27,8 @@ from constants import (
     STATE_SETTINGS_MENU,
 )
 from input_controller import InputController
+from runtime_mana_pool import RuntimeManaPool
+from runtime_coordination import RuntimeLock
 from settings_store import (
     build_default_settings,
     load_menu_schema,
@@ -34,22 +38,12 @@ from settings_store import (
     save_settings,
 )
 from ui import UI
-from runtime_coordination import RuntimeLock
-
-
-def printCard(
-    mana_value: int | float, settings: Dict[str, Dict[str, bool | int | float | str]]
-) -> None:
-    # Keep settings accessible for future expansion.
-    _ = settings
-    print(f"Chose mana value {mana_value}")
 
 
 class MomirApp:
     def __init__(self) -> None:
         self.running = True
         self.state = STATE_MAIN_MENU
-        self.mana_index = 0
 
         self.action_queue: "queue.SimpleQueue[str]" = queue.SimpleQueue()
         self.input = InputController(self.action_queue)
@@ -60,17 +54,39 @@ class MomirApp:
         self.settings = load_settings(
             SETTINGS_PATH, self.default_settings, self.settings_schema
         )
+        self.card_service = CardService(CARD_DB_PATH)
+        self.mana_pool = RuntimeManaPool(MANA_VALUES)
 
         self.settings_index = 0
         self.advanced_field_index = 0
         self.in_advanced_mode = False
+        self.popup_message: Optional[str] = None
+        self.status_message: Optional[str] = None
+        self.status_message_until_ms = 0
+        self.startup_status_message: Optional[str] = None
         self.runtime_lock = RuntimeLock()
+        self._load_mana_values_for_current_settings()
+
+    def _load_mana_values_for_current_settings(self) -> None:
+        available_values = self.card_service.get_available_mana_values(
+            self.settings_schema, self.settings
+        )
+        if available_values:
+            self.mana_pool.set_values(available_values)
+            return
+        if self.card_service.has_database():
+            self.startup_status_message = "Saved settings currently match no cards."
+        else:
+            self.startup_status_message = "Card database missing. Run fetch-db.py."
+
+    def _current_mana_value(self) -> int | float:
+        return self.mana_pool.current()
 
     def _inc_mana_index(self) -> None:
-        self.mana_index = min(self.mana_index + 1, len(MANA_VALUES) - 1)
+        self.mana_pool.step(1)
 
     def _dec_mana_index(self) -> None:
-        self.mana_index = max(self.mana_index - 1, 0)
+        self.mana_pool.step(-1)
 
     def _current_setting(self) -> Dict[str, Any]:
         if not self.settings_schema:
@@ -108,6 +124,7 @@ class MomirApp:
     def _open_settings(self) -> None:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
+        self.popup_message = None
 
     def _move_selection(self, delta: int) -> None:
         if self.in_advanced_mode:
@@ -210,6 +227,41 @@ class MomirApp:
             return
         self.state = STATE_MAIN_MENU
 
+    def _set_status_message(self, text: str, duration_ms: int = 2200) -> None:
+        self.status_message = text
+        self.status_message_until_ms = pygame.time.get_ticks() + max(200, duration_ms)
+
+    def _active_status_message(self) -> Optional[str]:
+        if not self.status_message:
+            return None
+        if pygame.time.get_ticks() > self.status_message_until_ms:
+            self.status_message = None
+            return None
+        return self.status_message
+
+    def _pick_random_card(self) -> None:
+        card_name = self.card_service.get_random_card_name(
+            self._current_mana_value(), self.settings_schema, self.settings
+        )
+        self.popup_message = card_name or "No matching card found."
+
+    def _save_settings_if_valid(self) -> None:
+        available_values = self.card_service.get_available_mana_values(
+            self.settings_schema, self.settings
+        )
+        if not available_values:
+            self._set_status_message("No cards match current filters. Not saved.", 3000)
+            print("Settings not saved: no cards match current filters.")
+            return
+
+        previous_mana = self._current_mana_value()
+        self.mana_pool.set_values(available_values, preferred_value=previous_mana)
+        save_settings(SETTINGS_PATH, self.settings)
+        self._set_status_message(
+            f"Settings saved. {len(available_values)} mana values available.", 2600
+        )
+        print("Settings saved.")
+
     def _handle_action(self, action: str) -> None:
         if self.state == STATE_MAIN_MENU:
             if action == ACTION_ROTARY_CW:
@@ -217,7 +269,10 @@ class MomirApp:
             elif action == ACTION_ROTARY_CCW:
                 self._dec_mana_index()
             elif action == ACTION_KNOB_PRESS:
-                printCard(MANA_VALUES[self.mana_index], self.settings)
+                if self.popup_message is not None:
+                    self.popup_message = None
+                else:
+                    self._pick_random_card()
             elif action in ALL_HAT_ACTIONS:
                 self._open_settings()
             return
@@ -242,8 +297,7 @@ class MomirApp:
             elif action in (ACTION_KEY2, ACTION_JOY_PRESS):
                 self._back()
             elif action == ACTION_KEY3:
-                save_settings(SETTINGS_PATH, self.settings)
-                print("Settings saved.")
+                self._save_settings_if_valid()
 
     def _map_keyboard(self, key: int) -> Optional[str]:
         keyboard_map = {
@@ -281,8 +335,13 @@ class MomirApp:
             self._handle_action(action)
 
     def _render(self) -> None:
+        status_message = self._active_status_message()
         if self.state == STATE_MAIN_MENU:
-            self.ui.draw_main_menu(MANA_VALUES[self.mana_index])
+            self.ui.draw_main_menu(
+                self._current_mana_value(),
+                popup_message=self.popup_message,
+                status_message=status_message,
+            )
         else:
             current_setting = self._current_setting()
             quick_labels: Dict[str, str] = {}
@@ -298,6 +357,7 @@ class MomirApp:
                 selected_field=self.advanced_field_index,
                 current_setting=current_setting,
                 quick_labels=quick_labels,
+                status_message=status_message,
             )
         self.ui.flip()
 
@@ -312,6 +372,8 @@ class MomirApp:
 
         try:
             self.ui.setup()
+            if self.startup_status_message:
+                self._set_status_message(self.startup_status_message, 3500)
             self.input.setup_gpio()
             clock = pygame.time.Clock()
             while self.running:

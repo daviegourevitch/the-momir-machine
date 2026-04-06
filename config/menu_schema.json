@@ -3,6 +3,46 @@
     {
       "id": "card_type",
       "label": "Card Type",
+      "filter": {
+        "mode": "any_enabled",
+        "field_rules": {
+          "creature": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Creature"
+          },
+          "instant": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Instant"
+          },
+          "sorcery": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Sorcery"
+          },
+          "artifact": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Artifact"
+          },
+          "enchantment": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Enchantment"
+          },
+          "planeswalker": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Planeswalker"
+          },
+          "battle": {
+            "op": "json_array_contains",
+            "column": "card_types",
+            "value": "Battle"
+          }
+        }
+      },
       "advanced_fields": [
         {
           "id": "creature",
@@ -93,6 +133,48 @@
       "id": "format",
       "label": "Format",
       "show_advanced": false,
+      "filter": {
+        "mode": "selected_field_rule",
+        "selected_field": "format",
+        "field_rules": {
+          "standard": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "standard",
+            "value": "legal"
+          },
+          "pioneer": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "pioneer",
+            "value": "legal"
+          },
+          "modern": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "modern",
+            "value": "legal"
+          },
+          "vintage": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "vintage",
+            "value": "legal"
+          },
+          "pauper": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "pauper",
+            "value": "legal"
+          },
+          "pre_modern": {
+            "op": "json_object_key_eq",
+            "column": "legalities",
+            "key": "premodern",
+            "value": "legal"
+          }
+        }
+      },
       "advanced_fields": [
         {
           "id": "format",
@@ -137,6 +219,26 @@
     {
       "id": "comedy",
       "label": "Comedy",
+      "filter": {
+        "mode": "any_enabled",
+        "field_rules": {
+          "not_funny": {
+            "op": "and",
+            "rules": [
+              { "op": "neq", "column": "set_type", "value": "funny" },
+              { "op": "neq", "column": "border_color", "value": "silver" }
+            ]
+          },
+          "silver_border": { "op": "eq", "column": "border_color", "value": "silver" },
+          "non_silver_funny": {
+            "op": "and",
+            "rules": [
+              { "op": "eq", "column": "set_type", "value": "funny" },
+              { "op": "neq", "column": "border_color", "value": "silver" }
+            ]
+          }
+        }
+      },
       "advanced_fields": [
         {
           "id": "not_funny",
@@ -191,6 +293,14 @@
       "id": "double_sided",
       "label": "Double Sided Cards",
       "show_advanced": false,
+      "filter": {
+        "mode": "selected_field_rule",
+        "selected_field": "double_sided",
+        "field_rules": {
+          "true": { "op": "not_null", "column": "card_faces" },
+          "false": { "op": "is_null", "column": "card_faces" }
+        }
+      },
       "advanced_fields": [
         {
           "id": "double_sided",

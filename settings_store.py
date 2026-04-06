@@ -31,6 +31,109 @@ def _coerce_for_field(value: Any, field: Dict[str, Any]) -> JSONValue | None:
     return None
 
 
+def _is_json_scalar(value: Any) -> bool:
+    return isinstance(value, (bool, int, float, str))
+
+
+def _validate_rule(rule: Any) -> Dict[str, Any] | None:
+    if not isinstance(rule, dict):
+        return None
+
+    op = rule.get("op")
+    if not isinstance(op, str) or not op:
+        return None
+
+    if op in ("and", "or"):
+        raw_rules = rule.get("rules")
+        if not isinstance(raw_rules, list):
+            return None
+        clean_rules: List[Dict[str, Any]] = []
+        for raw_child in raw_rules:
+            clean_child = _validate_rule(raw_child)
+            if clean_child is not None:
+                clean_rules.append(clean_child)
+        if not clean_rules:
+            return None
+        return {"op": op, "rules": clean_rules}
+
+    if op == "not":
+        clean_child = _validate_rule(rule.get("rule"))
+        if clean_child is None:
+            return None
+        return {"op": op, "rule": clean_child}
+
+    column = rule.get("column")
+    if not isinstance(column, str) or not column:
+        return None
+
+    if op in ("is_null", "not_null"):
+        return {"op": op, "column": column}
+
+    if op in ("eq", "neq"):
+        value = rule.get("value")
+        if not _is_json_scalar(value):
+            return None
+        return {"op": op, "column": column, "value": value}
+
+    if op in ("in", "not_in", "json_array_overlaps"):
+        raw_values = rule.get("values")
+        if not isinstance(raw_values, list) or not raw_values:
+            return None
+        clean_values = [value for value in raw_values if _is_json_scalar(value)]
+        if not clean_values:
+            return None
+        return {"op": op, "column": column, "values": clean_values}
+
+    if op == "json_array_contains":
+        value = rule.get("value")
+        if not _is_json_scalar(value):
+            return None
+        return {"op": op, "column": column, "value": value}
+
+    if op == "json_object_key_eq":
+        key = rule.get("key")
+        value = rule.get("value")
+        if not isinstance(key, str) or not key or not _is_json_scalar(value):
+            return None
+        return {"op": op, "column": column, "key": key, "value": value}
+
+    return None
+
+
+def _validate_filter(filter_def: Any) -> Dict[str, Any] | None:
+    if not isinstance(filter_def, dict):
+        return None
+
+    mode = filter_def.get("mode")
+    if mode not in ("any_enabled", "selected_field_rule"):
+        return None
+
+    raw_field_rules = filter_def.get("field_rules")
+    if not isinstance(raw_field_rules, dict) or not raw_field_rules:
+        return None
+
+    clean_field_rules: Dict[str, Dict[str, Any]] = {}
+    for raw_key, raw_rule in raw_field_rules.items():
+        if not isinstance(raw_key, str) or not raw_key:
+            continue
+        clean_rule = _validate_rule(raw_rule)
+        if clean_rule is not None:
+            clean_field_rules[raw_key] = clean_rule
+
+    if not clean_field_rules:
+        return None
+
+    clean_filter: Dict[str, Any] = {"mode": mode, "field_rules": clean_field_rules}
+
+    selected_field = filter_def.get("selected_field")
+    if mode == "selected_field_rule":
+        if not isinstance(selected_field, str) or not selected_field:
+            return None
+        clean_filter["selected_field"] = selected_field
+
+    return clean_filter
+
+
 def _validate_field(field: Any) -> Dict[str, Any] | None:
     if not isinstance(field, dict):
         return None
@@ -155,6 +258,9 @@ def _validate_setting(setting: Any) -> Dict[str, Any] | None:
         "quick_options": quick_options,
         "show_advanced": show_advanced,
     }
+    clean_filter = _validate_filter(setting.get("filter"))
+    if clean_filter is not None:
+        clean_setting["filter"] = clean_filter
     return clean_setting
 
 
