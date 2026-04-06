@@ -92,6 +92,7 @@
     {
       "id": "format",
       "label": "Format",
+      "show_advanced": false,
       "advanced_fields": [
         {
           "id": "format",
@@ -189,6 +190,7 @@
     {
       "id": "double_sided",
       "label": "Double Sided Cards",
+      "show_advanced": false,
       "advanced_fields": [
         {
           "id": "double_sided",
