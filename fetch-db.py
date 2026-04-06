@@ -256,8 +256,19 @@ def create_schema(conn: sqlite3.Connection) -> None:
     )
 
     conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_name ON cards("name");')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_cmc ON cards("cmc");')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_oracle_id ON cards("oracle_id");')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_set ON cards("set");')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_set_type ON cards("set_type");')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_cards_border_color ON cards("border_color");')
+    conn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_cards_cmc_set_type_border_color '
+        'ON cards("cmc", "set_type", "border_color");'
+    )
+    conn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_cards_card_faces_present '
+        'ON cards("id") WHERE "card_faces" IS NOT NULL;'
+    )
     conn.execute(
         'CREATE INDEX IF NOT EXISTS idx_cards_collector_number ON cards("collector_number");'
     )

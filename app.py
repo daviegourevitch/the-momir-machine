@@ -71,7 +71,7 @@ class MomirApp:
         self._load_mana_values_for_current_settings()
 
     def _load_mana_values_for_current_settings(self) -> None:
-        available_values = self.card_service.get_available_mana_values(
+        available_values = self.card_service.warm_runtime_cache(
             self.settings_schema, self.settings
         )
         if available_values:
@@ -276,8 +276,14 @@ class MomirApp:
         pygame.event.pump()
 
         candidate_settings = self._menu_settings()
-        available_values = self.card_service.get_available_mana_values(
+        cache_preview = self.card_service.preview_runtime_cache(
             self.settings_schema, candidate_settings
+        )
+        preview_values = cache_preview.get("available_mana_values", [])
+        available_values = (
+            list(preview_values)
+            if isinstance(preview_values, list)
+            else []
         )
         self.is_loading = False
         self._drop_pending_actions()
@@ -289,6 +295,7 @@ class MomirApp:
         previous_mana = self._current_mana_value()
         self.mana_pool.set_values(available_values, preferred_value=previous_mana)
         self.settings = deepcopy(candidate_settings)
+        self.card_service.apply_runtime_cache_preview(cache_preview)
         save_settings(SETTINGS_PATH, self.settings)
         self.edit_settings = deepcopy(self.settings)
         self._set_status_message(
