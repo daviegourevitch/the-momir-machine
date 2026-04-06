@@ -1,7 +1,7 @@
 # Waveshare 1.3" LCD HAT — GPIO mouse
 #
-# Keys: KEY1 = scroll up, KEY2 = right click, KEY3 = scroll down.
-# Clicks: PyMouse (needs DISPLAY=:0 in a desktop terminal).
+# Keys: KEY1 = scroll up (repeats while held), KEY2 = right button hold, KEY3 = scroll down (repeats).
+# Clicks: PyMouse press/release (needs DISPLAY=:0 in a desktop terminal).
 # Joystick moves: linux uinput (works when XWarpPointer is blocked on Wayland).
 #
 #   ~/waveshare-mouse-venv/bin/pip install pymouse evdev RPi.GPIO
@@ -44,24 +44,18 @@ try:
             _ui.write(e.EV_REL, e.REL_Y, dy)
         _ui.syn()
 
-    def click_left_evdev() -> None:
-        """Left click on the uinput pointer (matches joystick REL moves on Wayland)."""
+    def set_left_evdev(pressed: bool) -> None:
+        """Left button down/up on the uinput pointer (matches joystick REL moves on Wayland)."""
         if _ui is None:
             return
-        _ui.write(e.EV_KEY, e.BTN_LEFT, 1)
-        _ui.syn()
-        time.sleep(0.02)
-        _ui.write(e.EV_KEY, e.BTN_LEFT, 0)
+        _ui.write(e.EV_KEY, e.BTN_LEFT, 1 if pressed else 0)
         _ui.syn()
 
-    def click_right_evdev() -> None:
-        """Right click on the uinput pointer."""
+    def set_right_evdev(pressed: bool) -> None:
+        """Right button down/up on the uinput pointer."""
         if _ui is None:
             return
-        _ui.write(e.EV_KEY, e.BTN_RIGHT, 1)
-        _ui.syn()
-        time.sleep(0.02)
-        _ui.write(e.EV_KEY, e.BTN_RIGHT, 0)
+        _ui.write(e.EV_KEY, e.BTN_RIGHT, 1 if pressed else 0)
         _ui.syn()
 
     def scroll_wheel_evdev(delta: int) -> None:
@@ -79,10 +73,10 @@ except Exception as ex:
     def move_rel(dx: int, dy: int) -> None:
         pass
 
-    def click_left_evdev() -> None:
+    def set_left_evdev(pressed: bool) -> None:
         pass
 
-    def click_right_evdev() -> None:
+    def set_right_evdev(pressed: bool) -> None:
         pass
 
     def scroll_wheel_evdev(delta: int) -> None:
@@ -123,6 +117,18 @@ def scroll_x11(button: str) -> None:
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         pass
 
+
+def pymouse_set_button(m: PyMouse, x: int, y: int, button: int, pressed: bool) -> None:
+    """X11 fallback: hold or release a button (same numbering as PyMouse.click)."""
+    if pressed:
+        if hasattr(m, "press"):
+            m.press(x, y, button)
+        else:
+            m.click(x, y, button)
+    elif hasattr(m, "release"):
+        m.release(x, y, button)
+
+
 for pin in (
     JOY_UP,
     JOY_DOWN,
@@ -147,53 +153,71 @@ def main() -> None:
     DEBUG = os.environ.get("JOY_DEBUG", "") == "1"
     m = PyMouse()
     key1_down = False
-    key2_down = False
+    key2_held = False
     key3_down = False
-    joy_press_down = False
+    joy_left_held = False
     prev_joy_dirs = (False, False, False, False)
 
     while True:
         x, y = m.position()
 
-        if (not GPIO.input(BTN_KEY1)) and (not key1_down):
+        if not GPIO.input(BTN_KEY1):
+            if not key1_down:
+                print("KEY1 (scroll up)")
             key1_down = True
-            print("KEY1 (scroll up)")
             if _HAVE_UINPUT:
                 scroll_wheel_evdev(SCROLL_WHEEL_DELTA)
             else:
                 scroll_x11("up")
-        if GPIO.input(BTN_KEY1):
+        else:
             key1_down = False
 
-        if (not GPIO.input(BTN_KEY2)) and (not key2_down):
-            key2_down = True
-            print("KEY2 (right click)")
-            if _HAVE_UINPUT:
-                click_right_evdev()
-            else:
-                m.click(x, y, 3)
-        if GPIO.input(BTN_KEY2):
-            key2_down = False
+        key2_pressed = not GPIO.input(BTN_KEY2)
+        if key2_pressed:
+            if not key2_held:
+                key2_held = True
+                print("KEY2 (right button down)")
+                if _HAVE_UINPUT:
+                    set_right_evdev(True)
+                else:
+                    pymouse_set_button(m, x, y, 3, True)
+        else:
+            if key2_held:
+                key2_held = False
+                print("KEY2 (right button up)")
+                if _HAVE_UINPUT:
+                    set_right_evdev(False)
+                else:
+                    pymouse_set_button(m, x, y, 3, False)
 
-        if (not GPIO.input(BTN_KEY3)) and (not key3_down):
+        if not GPIO.input(BTN_KEY3):
+            if not key3_down:
+                print("KEY3 (scroll down)")
             key3_down = True
-            print("KEY3 (scroll down)")
             if _HAVE_UINPUT:
                 scroll_wheel_evdev(-SCROLL_WHEEL_DELTA)
             else:
                 scroll_x11("down")
-        if GPIO.input(BTN_KEY3):
+        else:
             key3_down = False
 
-        if (not GPIO.input(JOY_PRESS)) and (not joy_press_down):
-            joy_press_down = True
-            print("JOY_PRESS")
-            if _HAVE_UINPUT:
-                click_left_evdev()
-            else:
-                m.click(x, y, 1)
-        if GPIO.input(JOY_PRESS):
-            joy_press_down = False
+        joy_press_pressed = not GPIO.input(JOY_PRESS)
+        if joy_press_pressed:
+            if not joy_left_held:
+                joy_left_held = True
+                print("JOY_PRESS (left button down)")
+                if _HAVE_UINPUT:
+                    set_left_evdev(True)
+                else:
+                    pymouse_set_button(m, x, y, 1, True)
+        else:
+            if joy_left_held:
+                joy_left_held = False
+                print("JOY_PRESS (left button up)")
+                if _HAVE_UINPUT:
+                    set_left_evdev(False)
+                else:
+                    pymouse_set_button(m, x, y, 1, False)
 
         du = not GPIO.input(JOY_UP)
         dd = not GPIO.input(JOY_DOWN)
@@ -231,6 +255,12 @@ if __name__ == "__main__":
     try:
         main()
     finally:
+        if _HAVE_UINPUT:
+            try:
+                set_left_evdev(False)
+                set_right_evdev(False)
+            except Exception:
+                pass
         if _ui is not None:
             try:
                 _ui.close()
