@@ -50,13 +50,15 @@ try:
     if not _gpio_enabled():
         raise ImportError("GPIO disabled on this platform (set MOMIR_FORCE_GPIO=1 to override).")
     _configure_gpiozero_pin_factory()
-    from gpiozero import Button, RotaryEncoder
+    from gpiozero import Button
+
+    from quadrature_knob import KNOB_PIN_A_BCM, KNOB_PIN_B_BCM, QuadratureKnob
 
     HAVE_GPIOZERO = True
 except Exception:
     HAVE_GPIOZERO = False
     Button = None  # type: ignore[assignment]
-    RotaryEncoder = None  # type: ignore[assignment]
+    QuadratureKnob = None  # type: ignore[assignment]
 
 
 class InputController:
@@ -72,7 +74,7 @@ class InputController:
             return
 
         try:
-            self.encoder = RotaryEncoder(17, 23, bounce_time=0.01)
+            self.encoder = QuadratureKnob(KNOB_PIN_A_BCM, KNOB_PIN_B_BCM)
             self.encoder.when_rotated_clockwise = lambda: self.action_queue.put(ACTION_ROTARY_CW)
             self.encoder.when_rotated_counter_clockwise = (
                 lambda: self.action_queue.put(ACTION_ROTARY_CCW)
