@@ -15,6 +15,7 @@ import time
 import os
 import RPi.GPIO as GPIO
 import subprocess
+import signal
 
 _ui = None
 _HAVE_UINPUT = False
@@ -100,6 +101,12 @@ POLL_INTERVAL_S = 0.05
 
 # Key1 = scroll up, Key3 = scroll down (uinput REL_WHEEL units per press).
 SCROLL_WHEEL_DELTA = 1
+_RUNNING = True
+
+
+def _request_shutdown(_signum, _frame) -> None:
+    global _RUNNING
+    _RUNNING = False
 
 
 def scroll_x11(button: str) -> None:
@@ -158,7 +165,7 @@ def main() -> None:
     joy_left_held = False
     prev_joy_dirs = (False, False, False, False)
 
-    while True:
+    while _RUNNING:
         x, y = m.position()
 
         if not GPIO.input(BTN_KEY1):
@@ -252,6 +259,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
     try:
         main()
     finally:

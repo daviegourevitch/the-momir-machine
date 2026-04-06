@@ -24,12 +24,45 @@ DISPLAY="${DISPLAY:-:0}"
 XAUTHORITY="${XAUTHORITY:-${HOME}/.Xauthority}"
 
 MOUSE_RESTART="${MOUSE_RESTART:-1}"
+MOUSE_STOP_TIMEOUT_S="${MOUSE_STOP_TIMEOUT_S:-2.0}"
+MOUSE_START_DELAY_S="${MOUSE_START_DELAY_S:-0.35}"
+
+mouse_pids() {
+  if [[ -n "${MOUSE_SCRIPT}" ]] && [[ -f "${MOUSE_SCRIPT}" ]]; then
+    pgrep -f "${MOUSE_SCRIPT}" 2>/dev/null || true
+  else
+    pgrep -f '[ /]mouse\.py' 2>/dev/null || true
+  fi
+}
 
 stop_mouse() {
-  if [[ -n "${MOUSE_SCRIPT}" ]] && [[ -f "${MOUSE_SCRIPT}" ]]; then
-    pkill -f "${MOUSE_SCRIPT}" 2>/dev/null || true
-  else
-    pkill -f '[ /]mouse\.py' 2>/dev/null || true
+  local pids elapsed_s
+  pids="$(mouse_pids)"
+  if [[ -z "${pids}" ]]; then
+    return 0
+  fi
+
+  # Ask mouse.py to exit cleanly so it can release held buttons and GPIO.
+  kill -INT ${pids} 2>/dev/null || true
+
+  elapsed_s=0.0
+  while [[ -n "$(mouse_pids)" ]]; do
+    if awk "BEGIN {exit !(${elapsed_s} >= ${MOUSE_STOP_TIMEOUT_S})}"; then
+      break
+    fi
+    sleep 0.1
+    elapsed_s="$(awk "BEGIN {print ${elapsed_s} + 0.1}")"
+  done
+
+  pids="$(mouse_pids)"
+  if [[ -n "${pids}" ]]; then
+    kill -TERM ${pids} 2>/dev/null || true
+    sleep 0.2
+  fi
+
+  pids="$(mouse_pids)"
+  if [[ -n "${pids}" ]]; then
+    kill -KILL ${pids} 2>/dev/null || true
   fi
 }
 
@@ -51,6 +84,8 @@ start_mouse() {
 }
 
 cleanup() {
+  # Give gpiozero / kernel input a brief moment to close before restart.
+  sleep "${MOUSE_START_DELAY_S}"
   start_mouse
 }
 trap cleanup EXIT
