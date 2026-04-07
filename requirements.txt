@@ -6,3 +6,7 @@ gpiozero>=2.0.1
 # needs swig + dev headers). See documentation/set-up-hat.md § Python GPIO.
 cairosvg>=2.7.0
 ijson>=3.3.0
+python-escpos>=3.1
+Pillow>=10.0.0
+requests>=2.31.0
+pyusb>=1.2.1
