@@ -36,8 +36,9 @@ class RuntimeLock:
             return
         # Create lock file with permissive mode so root/non-root processes can
         # both open and lock the same file in /tmp.
-        fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o666)
-        os.close(fd)
+        if not Path(self.path).exists():
+            fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o666)
+            os.close(fd)
         try:
             os.chmod(self.path, 0o666)
         except PermissionError:
@@ -50,7 +51,15 @@ class RuntimeLock:
             return True
         self._ensure_parent_dir()
         self._prepare_lock_file()
-        self._fh = open(self.path, "a+", encoding="utf-8")
+        try:
+            self._fh = open(self.path, "a+", encoding="utf-8")
+        except PermissionError:
+            # Root-created lock files may be read-only to regular users. A
+            # read-only descriptor is still enough for flock-based locking.
+            if sys.platform != "win32":
+                self._fh = open(self.path, "r", encoding="utf-8")
+            else:
+                raise
         try:
             if sys.platform == "win32":
                 mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
