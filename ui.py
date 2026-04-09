@@ -188,6 +188,7 @@ class UI:
         selected_field: int,
         current_setting: Dict[str, Any],
         quick_labels: Dict[str, str],
+        printer_entry_label: str = "Printer Settings",
         status_message: str | None = None,
         is_loading: bool = False,
     ) -> None:
@@ -246,24 +247,32 @@ class UI:
             self.screen.blit(empty_text, (8, 50))
             return
 
-        selected_setting = max(0, min(selected_setting, len(settings_schema) - 1))
-        selected_item = settings_schema[selected_setting]
-        selected_can_advanced = bool(selected_item.get("show_advanced", False))
-        start = max(0, min(selected_setting - max_rows + 1, len(settings_schema) - max_rows))
-        end = min(len(settings_schema), start + max_rows)
+        settings_rows = len(settings_schema) + 1  # +1 dedicated Printer Settings item
+        selected_setting = max(0, min(selected_setting, settings_rows - 1))
+        selected_is_printer_row = selected_setting == len(settings_schema)
+        selected_can_advanced = (
+            True
+            if selected_is_printer_row
+            else bool(settings_schema[selected_setting].get("show_advanced", False))
+        )
+        start = max(0, min(selected_setting - max_rows + 1, settings_rows - max_rows))
+        end = min(settings_rows, start + max_rows)
 
         for row, idx in enumerate(range(start, end)):
-            item = settings_schema[idx]
             y = top_y + row * row_height
             is_selected = idx == selected_setting
             if is_selected:
                 pygame.draw.rect(self.screen, (70, 70, 70), (4, y - 2, SCREEN_WIDTH - 8, row_height))
 
-            setting_id = str(item.get("id", ""))
-            label = str(item.get("label", setting_id))
-            quick_label = quick_labels.get(setting_id, "Custom")
-            advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
-            line = f"{label}: {quick_label}{advanced_suffix}"
+            if idx == len(settings_schema):
+                line = f"{printer_entry_label}: Open >"
+            else:
+                item = settings_schema[idx]
+                setting_id = str(item.get("id", ""))
+                label = str(item.get("label", setting_id))
+                quick_label = quick_labels.get(setting_id, "Custom")
+                advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
+                line = f"{label}: {quick_label}{advanced_suffix}"
             text_surface = self.menu_font.render(line, True, (255, 255, 255))
             self.screen.blit(text_surface, (8, y))
 
@@ -274,6 +283,69 @@ class UI:
                 else "L/R quick  K2/JOY back  K3 save"
             )
             hint = self.hint_font.render(hint_text, True, (170, 170, 170))
+            self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
+            if status_message:
+                self._draw_status_banner(status_message)
+
+        if is_loading:
+            self._draw_loading_overlay()
+
+    def draw_printer_settings_menu(
+        self,
+        fields: List[Dict[str, Any]],
+        selected_index: int,
+        settings: Dict[str, bool | int | float],
+        status_message: str | None = None,
+        is_loading: bool = False,
+    ) -> None:
+        if self.screen is None or self.title_font is None or self.menu_font is None:
+            return
+
+        self.screen.fill((10, 10, 10))
+        title = self.title_font.render("Printer Settings", True, (230, 230, 230))
+        self.screen.blit(title, (8, 8))
+
+        row_height = 22
+        top_y = 38
+        rows: List[str] = []
+
+        for field in fields:
+            field_id = str(field.get("id", ""))
+            label = str(field.get("label", field_id))
+            value = settings.get(field_id, "")
+            if isinstance(value, bool):
+                value_text = "ON" if value else "OFF"
+            elif isinstance(value, float):
+                value_text = f"{value:.2f}"
+            else:
+                value_text = str(value)
+            rows.append(f"{label}: {value_text}")
+
+        rows.append("Save settings")
+        rows.append("Reset to baseline")
+
+        if not rows:
+            return
+
+        selected_index = max(0, min(selected_index, len(rows) - 1))
+        max_rows = max(1, (SCREEN_HEIGHT - top_y - 24) // row_height)
+        start = max(0, min(selected_index - max_rows + 1, len(rows) - max_rows))
+        end = min(len(rows), start + max_rows)
+
+        for row, idx in enumerate(range(start, end)):
+            y = top_y + row * row_height
+            is_selected = idx == selected_index
+            if is_selected:
+                pygame.draw.rect(self.screen, (70, 70, 70), (4, y - 2, SCREEN_WIDTH - 8, row_height))
+            text_surface = self.menu_font.render(rows[idx], True, (255, 255, 255))
+            self.screen.blit(text_surface, (8, y))
+
+        if self.hint_font is not None:
+            hint = self.hint_font.render(
+                "U/D select  L/R adjust  K1 action  K2/JOY back  K3 save",
+                True,
+                (170, 170, 170),
+            )
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
             if status_message:
                 self._draw_status_banner(status_message)

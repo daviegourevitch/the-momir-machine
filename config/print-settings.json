@@ -1,0 +1,9 @@
+{
+  "dither_enabled": true,
+  "threshold": 140,
+  "contrast": 2.0,
+  "unsharp_radius": 1.0,
+  "unsharp_percent": 150,
+  "unsharp_threshold": 3,
+  "gamma": 1.8
+}

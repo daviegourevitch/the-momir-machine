@@ -28,6 +28,7 @@ MANA_VALUES = (
 
 STATE_MAIN_MENU = "main_menu"
 STATE_SETTINGS_MENU = "settings_menu"
+STATE_PRINTER_SETTINGS_MENU = "printer_settings_menu"
 
 ACTION_ROTARY_CW = "rotary_cw"
 ACTION_ROTARY_CCW = "rotary_ccw"
@@ -56,6 +57,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 BELEREN_FONT_PATH = ROOT_DIR / "Beleren-Bold.ttf"
 MENU_SCHEMA_PATH = ROOT_DIR / "config" / "menu_schema.json"
 SETTINGS_PATH = ROOT_DIR / "config" / "settings.json"
+PRINT_SETTINGS_PATH = ROOT_DIR / "config" / "print-settings.json"
 CARD_DB_PATH = ROOT_DIR / "data" / "scryfall" / "cards.db"
 BACKGROUND_PATH = ROOT_DIR / "animation" / "originals" / "from-modo.jpg"
 MANA_ICONS_DIR = ROOT_DIR / "mana-icons"

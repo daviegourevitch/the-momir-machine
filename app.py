@@ -23,14 +23,24 @@ from constants import (
     CARD_DB_PATH,
     MANA_VALUES,
     MENU_SCHEMA_PATH,
+    PRINT_SETTINGS_PATH,
     SETTINGS_PATH,
     STATE_MAIN_MENU,
+    STATE_PRINTER_SETTINGS_MENU,
     STATE_SETTINGS_MENU,
 )
 from input_controller import InputController
 from runtime_mana_pool import RuntimeManaPool
 from runtime_coordination import RuntimeLock
 from printer_service import is_printer_connected, print_card_image
+from print_settings_store import (
+    DEFAULT_PRINT_SETTINGS,
+    PRINT_SETTING_FIELDS,
+    PrintSettingField,
+    PrintSettings,
+    load_print_settings,
+    save_print_settings,
+)
 from settings_store import (
     build_default_settings,
     load_menu_schema,
@@ -57,11 +67,15 @@ class MomirApp:
             SETTINGS_PATH, self.default_settings, self.settings_schema
         )
         self.edit_settings: Optional[Dict[str, Dict[str, bool | int | float | str]]] = None
+        self.default_print_settings: PrintSettings = dict(DEFAULT_PRINT_SETTINGS)
+        self.print_settings: PrintSettings = load_print_settings(PRINT_SETTINGS_PATH)
+        self.edit_print_settings: Optional[PrintSettings] = None
         self.card_service = CardService(CARD_DB_PATH)
         self.mana_pool = RuntimeManaPool(MANA_VALUES)
 
         self.settings_index = 0
         self.advanced_field_index = 0
+        self.printer_settings_index = 0
         self.in_advanced_mode = False
         self.popup_message: Optional[str] = None
         self.popup_title = "Random Card"
@@ -114,6 +128,23 @@ class MomirApp:
             return self.edit_settings
         return self.settings
 
+    def _is_printer_settings_item_selected(self) -> bool:
+        return not self.in_advanced_mode and self.settings_index >= len(self.settings_schema)
+
+    def _printer_settings(self) -> PrintSettings:
+        if self.edit_print_settings is not None:
+            return self.edit_print_settings
+        return self.print_settings
+
+    def _printer_row_count(self) -> int:
+        # Adjustable fields + Save + Reset rows.
+        return len(PRINT_SETTING_FIELDS) + 2
+
+    def _printer_field_for_index(self) -> Optional[PrintSettingField]:
+        if self.printer_settings_index < len(PRINT_SETTING_FIELDS):
+            return PRINT_SETTING_FIELDS[self.printer_settings_index]
+        return None
+
     def _current_advanced_field(self) -> Dict[str, Any]:
         setting = self._current_setting()
         fields = setting.get("advanced_fields", [])
@@ -136,9 +167,15 @@ class MomirApp:
     def _open_settings(self) -> None:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
+        self.settings_index = max(0, min(self.settings_index, len(self.settings_schema)))
         self.popup_message = None
         self.popup_title = "Random Card"
         self.edit_settings = deepcopy(self.settings)
+
+    def _open_printer_settings(self) -> None:
+        self.state = STATE_PRINTER_SETTINGS_MENU
+        self.printer_settings_index = 0
+        self.edit_print_settings = dict(self.print_settings)
 
     def _move_selection(self, delta: int) -> None:
         if self.in_advanced_mode:
@@ -150,13 +187,20 @@ class MomirApp:
 
         if not self.settings_schema:
             return
-        self.settings_index = (self.settings_index + delta) % len(self.settings_schema)
+        total_rows = len(self.settings_schema) + 1  # +1 for Printer Settings entry
+        self.settings_index = (self.settings_index + delta) % total_rows
+
+    def _move_printer_selection(self, delta: int) -> None:
+        total_rows = self._printer_row_count()
+        self.printer_settings_index = (self.printer_settings_index + delta) % total_rows
 
     @staticmethod
     def _is_number(value: Any) -> bool:
         return isinstance(value, (int, float)) and not isinstance(value, bool)
 
     def _cycle_quick_option(self, delta: int) -> None:
+        if self._is_printer_settings_item_selected():
+            return
         setting = self._current_setting()
         if not setting:
             return
@@ -228,7 +272,52 @@ class MomirApp:
                 idx = (idx + (1 if delta > 0 else -1)) % len(clean_options)
             values[field_id] = clean_options[idx]
 
+    def _adjust_printer_value(self, delta: int) -> None:
+        field = self._printer_field_for_index()
+        if field is None:
+            return
+
+        field_id = field["id"]
+        values = self._printer_settings()
+        current_value = values.get(field_id, self.default_print_settings[field_id])
+        field_type = field["type"]
+
+        if field_type == "boolean":
+            values[field_id] = not bool(current_value)
+            return
+
+        step = float(field["step"])
+        direction = 1.0 if delta > 0 else -1.0
+        if field["number_type"] == "int":
+            base = int(current_value) if self._is_number(current_value) else int(field["min"])
+            next_value = int(round(base + (step * direction)))
+            next_value = max(int(field["min"]), min(int(field["max"]), next_value))
+            values[field_id] = next_value
+            return
+
+        base_float = (
+            float(current_value) if self._is_number(current_value) else float(field["min"])
+        )
+        next_float = base_float + (step * direction)
+        next_float = max(float(field["min"]), min(float(field["max"]), next_float))
+        values[field_id] = round(next_float, 2)
+
+    def _save_printer_settings(self) -> None:
+        candidate_settings = dict(self._printer_settings())
+        save_print_settings(PRINT_SETTINGS_PATH, candidate_settings)
+        self.print_settings = load_print_settings(PRINT_SETTINGS_PATH)
+        self.edit_print_settings = dict(self.print_settings)
+        self._set_status_message("Printer settings saved.", 2200)
+        print("Printer settings saved.")
+
+    def _reset_printer_settings_to_baseline(self) -> None:
+        self.edit_print_settings = dict(self.default_print_settings)
+        self._set_status_message("Printer settings reset to baseline.", 2200)
+
     def _enter_submenu(self) -> None:
+        if self._is_printer_settings_item_selected():
+            self._open_printer_settings()
+            return
         setting = self._current_setting()
         if not self._setting_allows_advanced(setting):
             return
@@ -236,6 +325,10 @@ class MomirApp:
         self.advanced_field_index = 0
 
     def _back(self) -> None:
+        if self.state == STATE_PRINTER_SETTINGS_MENU:
+            self.edit_print_settings = None
+            self.state = STATE_SETTINGS_MENU
+            return
         if self.in_advanced_mode:
             self.in_advanced_mode = False
             return
@@ -381,6 +474,26 @@ class MomirApp:
                 self._back()
             elif action == ACTION_KEY3:
                 self._save_settings_if_valid()
+            return
+
+        if self.state == STATE_PRINTER_SETTINGS_MENU:
+            if action == ACTION_UP:
+                self._move_printer_selection(-1)
+            elif action == ACTION_DOWN:
+                self._move_printer_selection(1)
+            elif action == ACTION_LEFT:
+                self._adjust_printer_value(-1)
+            elif action == ACTION_RIGHT:
+                self._adjust_printer_value(1)
+            elif action == ACTION_KEY1:
+                if self.printer_settings_index == len(PRINT_SETTING_FIELDS):
+                    self._save_printer_settings()
+                elif self.printer_settings_index == len(PRINT_SETTING_FIELDS) + 1:
+                    self._reset_printer_settings_to_baseline()
+            elif action == ACTION_KEY3:
+                self._save_printer_settings()
+            elif action in (ACTION_KEY2, ACTION_JOY_PRESS):
+                self._back()
 
     def _map_keyboard(self, key: int) -> Optional[str]:
         keyboard_map = {
@@ -427,7 +540,7 @@ class MomirApp:
                 status_message=status_message,
                 is_loading=self.is_loading,
             )
-        else:
+        elif self.state == STATE_SETTINGS_MENU:
             current_setting = self._current_setting()
             menu_settings = self._menu_settings()
             quick_labels: Dict[str, str] = {}
@@ -443,6 +556,15 @@ class MomirApp:
                 selected_field=self.advanced_field_index,
                 current_setting=current_setting,
                 quick_labels=quick_labels,
+                printer_entry_label="Printer Settings",
+                status_message=status_message,
+                is_loading=self.is_loading,
+            )
+        elif self.state == STATE_PRINTER_SETTINGS_MENU:
+            self.ui.draw_printer_settings_menu(
+                fields=PRINT_SETTING_FIELDS,
+                selected_index=self.printer_settings_index,
+                settings=self._printer_settings(),
                 status_message=status_message,
                 is_loading=self.is_loading,
             )

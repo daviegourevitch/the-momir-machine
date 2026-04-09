@@ -3,30 +3,79 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Optional
 
+import numpy as np
 import requests
 import usb.core
 import usb.util
 from escpos.exceptions import Error as EscposError
 from escpos.printer import Usb
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
+
+from constants import PRINT_SETTINGS_PATH
+from print_settings_store import PrintSettings, load_print_settings
 
 PRINTER_WIDTH_PX = 384
 
 
-def fetch_and_prepare_image(url: str, target_width: int = PRINTER_WIDTH_PX) -> Image.Image:
+def flatten_alpha_to_white(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    background.paste(rgba, mask=rgba.split()[3])
+    return background.convert("RGB")
+
+
+def apply_gamma(image: Image.Image, gamma: float) -> Image.Image:
+    arr = np.array(image, dtype=np.float32) / 255.0
+    arr = np.power(arr, 1.0 / max(gamma, 0.01))
+    return Image.fromarray((arr * 255).astype(np.uint8), mode="L")
+
+
+def threshold_image(image: Image.Image, threshold: int) -> Image.Image:
+    bounded = max(0, min(255, threshold))
+    return image.point(lambda pixel: 255 if pixel > bounded else 0, mode="1")
+
+
+def apply_preprocess_pipeline(
+    image: Image.Image, print_settings: PrintSettings
+) -> Image.Image:
+    # Option 2 baseline: alpha flatten, grayscale, gamma, contrast, unsharp.
+    image = flatten_alpha_to_white(image).convert("L")
+    image = apply_gamma(image, float(print_settings["gamma"]))
+    image = ImageEnhance.Contrast(image).enhance(float(print_settings["contrast"]))
+    image = image.filter(
+        ImageFilter.UnsharpMask(
+            radius=float(print_settings["unsharp_radius"]),
+            percent=int(print_settings["unsharp_percent"]),
+            threshold=int(print_settings["unsharp_threshold"]),
+        )
+    )
+    return image
+
+
+def fetch_and_prepare_image(
+    url: str,
+    target_width: int = PRINTER_WIDTH_PX,
+    print_settings: Optional[PrintSettings] = None,
+) -> Image.Image:
     response = requests.get(url, timeout=30)
     response.raise_for_status()
 
     image = Image.open(BytesIO(response.content))
-    image = image.convert("L")
+    settings = (
+        print_settings if print_settings is not None else load_print_settings(PRINT_SETTINGS_PATH)
+    )
+    image = apply_preprocess_pipeline(image, settings)
 
-    if image.width > target_width:
+    if image.width != target_width:
         ratio = target_width / float(image.width)
         target_height = max(1, int(image.height * ratio))
-        image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        image = image.resize((target_width, target_height), Image.Resampling.BICUBIC)
 
-    # Dither to 1-bit bitmap for thermal ESC/POS output.
-    return image.convert("1")
+    if bool(settings["dither_enabled"]):
+        # Floyd-Steinberg dithering in PIL default conversion to 1-bit.
+        return image.convert("1")
+
+    return threshold_image(image, int(settings["threshold"]))
 
 
 def detect_usb_printer() -> Optional[Usb]:
