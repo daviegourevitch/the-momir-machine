@@ -73,7 +73,7 @@ def detect_usb_printer() -> Optional[Usb]:
             out_ep: Optional[int] = None
 
             for endpoint in interface:
-                endpoint_type = int(endpoint.bmAttributes) & usb.util.ENDPOINT_TYPE_MASK
+                endpoint_type = usb.util.endpoint_type(int(endpoint.bmAttributes))
                 if endpoint_type != usb.util.ENDPOINT_TYPE_BULK:
                     continue
 
