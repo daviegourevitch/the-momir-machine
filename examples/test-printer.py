@@ -12,10 +12,15 @@ from escpos.printer import Usb
 from PIL import Image
 
 
+# DEFAULT_URL = (
+#     "https://cards.scryfall.io/png/front/b/0/"
+#     "b0faa7f2-b547-42c4-a810-839da50dadfe.png?1559591477"
+# )
+
 DEFAULT_URL = (
-    "https://cards.scryfall.io/png/front/b/0/"
-    "b0faa7f2-b547-42c4-a810-839da50dadfe.png?1559591477"
+    "https://cards.scryfall.io/png/front/e/0/e00d16f9-ea27-4aa3-a134-4e04f934d020.png?1764758777"
 )
+
 PRINTER_WIDTH_PX = 384
 
 
@@ -131,7 +136,6 @@ def main() -> int:
     try:
         image = fetch_and_prepare_image(DEFAULT_URL)
         printer.image(image)
-        printer.text("\n\n")
         try:
             printer.cut()
         except EscposError:
