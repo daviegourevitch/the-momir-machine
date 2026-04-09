@@ -8,10 +8,21 @@
 #
 # Override paths if yours differ:
 #   MOMIR_APP=/path/to/app.py MOMIR_PYTHON=~/momir-venv/bin/python bash scripts/run-momir.sh
+# If root privileges are needed (for printer access), this script can relaunch
+# itself with sudo and preserve the needed environment variables.
 
 set -euo pipefail
 
-MOMIR_PYTHON="${MOMIR_PYTHON:-${HOME}/momir-venv/bin/python}"
+if [[ "${EUID}" -ne 0 ]]; then
+  exec sudo --preserve-env=DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,MOMIR_PYTHON,MOMIR_APP "$0" "$@"
+fi
+
+MOMIR_USER_HOME="${HOME}"
+if [[ -n "${SUDO_USER:-}" ]]; then
+  MOMIR_USER_HOME="$(eval echo "~${SUDO_USER}")"
+fi
+
+MOMIR_PYTHON="${MOMIR_PYTHON:-${MOMIR_USER_HOME}/momir-venv/bin/python}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOMIR_APP="${MOMIR_APP:-${SCRIPT_DIR}/../app.py}"
