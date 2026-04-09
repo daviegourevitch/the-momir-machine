@@ -5,8 +5,9 @@ from io import BytesIO
 import sys
 from pathlib import Path
 
+import numpy as np
 import requests
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter
 
 # Ensure the repository root is importable when running this script directly.
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -25,7 +26,8 @@ def fetch_source_image(url: str, target_width: int = PRINTER_WIDTH_PX) -> Image.
     response = requests.get(url, timeout=30)
     response.raise_for_status()
 
-    image = Image.open(BytesIO(response.content)).convert("L")
+    image = Image.open(BytesIO(response.content))
+    image = flatten_alpha_to_white(image)
     if image.width != target_width:
         ratio = target_width / float(image.width)
         target_height = max(1, int(image.height * ratio))
@@ -33,22 +35,78 @@ def fetch_source_image(url: str, target_width: int = PRINTER_WIDTH_PX) -> Image.
     return image
 
 
+def flatten_alpha_to_white(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    background.paste(rgba, mask=rgba.split()[3])
+    return background.convert("RGB")
+
+
+def to_grayscale(image: Image.Image) -> Image.Image:
+    return image.convert("L")
+
+
+def apply_gamma(image: Image.Image, gamma: float) -> Image.Image:
+    arr = np.array(image, dtype=np.float32) / 255.0
+    arr = np.power(arr, 1.0 / gamma)
+    return Image.fromarray((arr * 255).astype(np.uint8), mode="L")
+
+
+def enhance_contrast(image: Image.Image, factor: float) -> Image.Image:
+    return ImageEnhance.Contrast(image).enhance(factor)
+
+
+def apply_unsharp(
+    image: Image.Image, radius: float, percent: int, threshold: int
+) -> Image.Image:
+    return image.filter(
+        ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold)
+    )
+
+
 def threshold_image(image: Image.Image, threshold: int) -> Image.Image:
     # Convert to hard black/white without dithering for cleaner text edges.
     return image.point(lambda pixel: 255 if pixel > threshold else 0, mode="1")
 
 
-def build_variants(source_image: Image.Image) -> list[tuple[str, Image.Image]]:
-    enhanced = ImageOps.autocontrast(source_image, cutoff=2)
-    enhanced = enhanced.filter(
-        ImageFilter.UnsharpMask(radius=1.0, percent=180, threshold=2)
-    )
+def build_preprocessed_image(source_image: Image.Image) -> Image.Image:
+    image = to_grayscale(source_image)
+    image = apply_gamma(image, gamma=1.8)
+    image = enhance_contrast(image, factor=2.0)
+    image = apply_unsharp(image, radius=1.0, percent=150, threshold=3)
+    return image
+
+
+def build_variants(source_image: Image.Image) -> list[tuple[str, str, Image.Image]]:
+    baseline_gray = to_grayscale(source_image)
+    preprocessed = build_preprocessed_image(source_image)
 
     return [
-        ("Baseline dither", source_image.convert("1")),
-        ("No dither threshold 160", threshold_image(source_image, 160)),
-        ("No dither threshold 180", threshold_image(source_image, 180)),
-        ("Auto contrast + sharpen + threshold 170", threshold_image(enhanced, 170)),
+        (
+            "Baseline Floyd-Steinberg",
+            "Pipeline: grayscale -> Floyd-Steinberg dither",
+            baseline_gray.convert("1"),
+        ),
+        (
+            "Preprocessed Floyd-Steinberg",
+            "Pipeline: alpha flatten, gray, gamma=1.8, contrast=2.0, unsharp=1/150/3, dither",
+            preprocessed.convert("1"),
+        ),
+        (
+            "Preprocessed Hard Threshold 50%",
+            "Pipeline: alpha flatten, gray, gamma=1.8, contrast=2.0, unsharp=1/150/3, threshold=128",
+            threshold_image(preprocessed, 128),
+        ),
+        (
+            "Preprocessed Hard Threshold 55%",
+            "Pipeline: alpha flatten, gray, gamma=1.8, contrast=2.0, unsharp=1/150/3, threshold=140",
+            threshold_image(preprocessed, 140),
+        ),
+        (
+            "Preprocessed Hard Threshold 60%",
+            "Pipeline: alpha flatten, gray, gamma=1.8, contrast=2.0, unsharp=1/150/3, threshold=153",
+            threshold_image(preprocessed, 153),
+        ),
     ]
 
 
@@ -61,11 +119,12 @@ def main() -> int:
     try:
         source_image = fetch_source_image(DEFAULT_URL)
         variants = build_variants(source_image)
-        printer.text("Image conversion comparison\n")
-        printer.text("=========================\n\n")
+        printer.text("Top 5 print option comparison\n")
+        printer.text("=============================\n\n")
 
-        for index, (label, image) in enumerate(variants, start=1):
-            printer.text(f"{index}. {label}\n")
+        for index, (label, details, image) in enumerate(variants, start=1):
+            printer.text(f"Option {index}: {label}\n")
+            printer.text(f"{details}\n")
             printer.image(image)
             printer.text("\n")
 
