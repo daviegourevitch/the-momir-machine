@@ -31,10 +31,25 @@ class RuntimeLock:
     def _ensure_parent_dir(self) -> None:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
 
+    def _prepare_lock_file(self) -> None:
+        if sys.platform == "win32":
+            return
+        # Create lock file with permissive mode so root/non-root processes can
+        # both open and lock the same file in /tmp.
+        fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o666)
+        os.close(fd)
+        try:
+            os.chmod(self.path, 0o666)
+        except PermissionError:
+            # If another user owns the file we may not be able to chmod here;
+            # open() below will fail in that case and surface the error.
+            pass
+
     def acquire(self, blocking: bool = False) -> bool:
         if self._locked:
             return True
         self._ensure_parent_dir()
+        self._prepare_lock_file()
         self._fh = open(self.path, "a+", encoding="utf-8")
         try:
             if sys.platform == "win32":
