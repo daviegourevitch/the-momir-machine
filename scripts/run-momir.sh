@@ -13,8 +13,10 @@
 
 set -euo pipefail
 
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
 if [[ "${EUID}" -ne 0 ]]; then
-  exec sudo --preserve-env=DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,MOMIR_PYTHON,MOMIR_APP "$0" "$@"
+  exec sudo --preserve-env=DISPLAY,XAUTHORITY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,MOMIR_PYTHON,MOMIR_APP /usr/bin/env bash "${SCRIPT_PATH}" "$@"
 fi
 
 MOMIR_USER_HOME="${HOME}"
