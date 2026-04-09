@@ -8,9 +8,15 @@
     "planeswalker": true,
     "battle": true
   },
-  "roll_behavior": {
-    "allow_animations": true,
-    "reroll_limit": 1,
-    "source_pool": "main"
+  "format": {
+    "format": "no_format"
+  },
+  "comedy": {
+    "not_funny": true,
+    "silver_border": false,
+    "non_silver_funny": false
+  },
+  "double_sided": {
+    "double_sided": false
   }
 }

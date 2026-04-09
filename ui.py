@@ -74,7 +74,7 @@ class UI:
         pygame.draw.rect(self.screen, (120, 30, 30), rect)
         self.screen.blit(text_surface, (rect.x + pad_x, rect.y + pad_y))
 
-    def _draw_popup(self, text: str) -> None:
+    def _draw_popup(self, text: str, title: str = "Random Card") -> None:
         if self.screen is None:
             return
         title_font = self.title_font or self.menu_font
@@ -93,7 +93,7 @@ class UI:
         pygame.draw.rect(self.screen, (28, 28, 28), (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, (220, 220, 220), (box_x, box_y, box_width, box_height), 1)
 
-        heading = title_font.render("Random Card", True, (255, 255, 255))
+        heading = title_font.render(title, True, (255, 255, 255))
         self.screen.blit(heading, (box_x + 8, box_y + 8))
 
         body = body_font.render(text, True, (255, 255, 255))
@@ -137,6 +137,7 @@ class UI:
         self,
         mana_value: Union[int, float],
         popup_message: str | None = None,
+        popup_title: str = "Random Card",
         status_message: str | None = None,
         is_loading: bool = False,
     ) -> None:
@@ -174,7 +175,7 @@ class UI:
         if status_message:
             self._draw_status_banner(status_message)
         if popup_message:
-            self._draw_popup(popup_message)
+            self._draw_popup(popup_message, title=popup_title)
         if is_loading:
             self._draw_loading_overlay()
 

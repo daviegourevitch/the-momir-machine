@@ -30,6 +30,7 @@ from constants import (
 from input_controller import InputController
 from runtime_mana_pool import RuntimeManaPool
 from runtime_coordination import RuntimeLock
+from printer_service import is_printer_connected, print_card_image
 from settings_store import (
     build_default_settings,
     load_menu_schema,
@@ -63,12 +64,15 @@ class MomirApp:
         self.advanced_field_index = 0
         self.in_advanced_mode = False
         self.popup_message: Optional[str] = None
+        self.popup_title = "Random Card"
         self.status_message: Optional[str] = None
         self.status_message_until_ms = 0
         self.startup_status_message: Optional[str] = None
+        self.printer_connected = False
         self.is_loading = False
         self.runtime_lock = RuntimeLock()
         self._load_mana_values_for_current_settings()
+        self._detect_printer_at_startup()
 
     def _load_mana_values_for_current_settings(self) -> None:
         available_values = self.card_service.warm_runtime_cache(
@@ -133,6 +137,7 @@ class MomirApp:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
         self.popup_message = None
+        self.popup_title = "Random Card"
         self.edit_settings = deepcopy(self.settings)
 
     def _move_selection(self, delta: int) -> None:
@@ -241,6 +246,15 @@ class MomirApp:
         self.status_message = text
         self.status_message_until_ms = pygame.time.get_ticks() + max(200, duration_ms)
 
+    def _set_popup(self, text: Optional[str], title: str = "Random Card") -> None:
+        self.popup_message = text
+        self.popup_title = title
+
+    def _detect_printer_at_startup(self) -> None:
+        self.printer_connected = is_printer_connected()
+        if not self.printer_connected:
+            self._set_popup("No printer connected. Printing is disabled.", "Printer Error")
+
     def _active_status_message(self) -> Optional[str]:
         if not self.status_message:
             return None
@@ -251,16 +265,41 @@ class MomirApp:
 
     def _pick_random_card(self) -> None:
         self.is_loading = True
-        self.popup_message = None
+        self._set_popup(None)
         self._drop_pending_actions()
         self._render()
         pygame.event.pump()
-        card_name = self.card_service.get_random_card_name(
+        card = self.card_service.get_random_card(
             self._current_mana_value(), self.settings_schema, self.settings
         )
         self.is_loading = False
         self._drop_pending_actions()
-        self.popup_message = card_name or "No matching card found."
+        if card is None:
+            self._set_popup("No matching card found.")
+            return
+
+        card_name = card["name"]
+        image_url = card["image_url"]
+        if not self.printer_connected:
+            self._set_popup(f"Your card is {card_name} (no printer connected)")
+            return
+
+        self._set_popup(f"Printing card {card_name}", "Printer")
+        self._render()
+        pygame.event.pump()
+
+        if not image_url:
+            self._set_popup(f"Your card is {card_name}")
+            self._set_status_message("Could not print card: missing image URL.", 3000)
+            return
+
+        printed = print_card_image(image_url)
+        if printed:
+            self._set_popup(f"Your card is {card_name}")
+            return
+
+        self.printer_connected = False
+        self._set_popup(f"Your card is {card_name} (no printer connected)")
 
     def _drop_pending_actions(self) -> None:
         while True:
@@ -314,7 +353,7 @@ class MomirApp:
                 self._dec_mana_index()
             elif action == ACTION_KNOB_PRESS:
                 if self.popup_message is not None:
-                    self.popup_message = None
+                    self._set_popup(None)
                 else:
                     self._pick_random_card()
             elif action in ALL_HAT_ACTIONS:
@@ -384,6 +423,7 @@ class MomirApp:
             self.ui.draw_main_menu(
                 self._current_mana_value(),
                 popup_message=self.popup_message,
+                popup_title=self.popup_title,
                 status_message=status_message,
                 is_loading=self.is_loading,
             )
