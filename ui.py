@@ -172,6 +172,14 @@ class UI:
             value_y = (TOP_BANNER_HEIGHT - value_text.get_height()) // 2
             self.screen.blit(value_text, (value_x, value_y))
 
+        if self.hint_font is not None:
+            hint = self.hint_font.render(
+                "K1 Settings / K2 Print / K3 Quit",
+                True,
+                (170, 170, 170),
+            )
+            self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
+
         if status_message:
             self._draw_status_banner(status_message)
         if popup_message:

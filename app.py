@@ -19,7 +19,6 @@ from constants import (
     ACTION_ROTARY_CCW,
     ACTION_ROTARY_CW,
     ACTION_UP,
-    ALL_HAT_ACTIONS,
     CARD_DB_PATH,
     MANA_VALUES,
     MENU_SCHEMA_PATH,
@@ -449,8 +448,12 @@ class MomirApp:
                     self._set_popup(None)
                 else:
                     self._pick_random_card()
-            elif action in ALL_HAT_ACTIONS:
+            elif action == ACTION_KEY1:
                 self._open_settings()
+            elif action == ACTION_KEY2:
+                self._open_printer_settings()
+            elif action == ACTION_KEY3:
+                self.running = False
             return
 
         if self.state == STATE_SETTINGS_MENU:

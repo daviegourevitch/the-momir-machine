@@ -26,6 +26,8 @@ USER_AGENT = (
     "(+https://github.com/daviegourevitch/the-momir-machine)"
 )
 EXCLUDED_FIELDS = {"all_parts", "preview", "prices", "related_uris", "purchase_uris"}
+EXCLUDED_SET_TYPES = {"memorabilia"}
+EXCLUDED_LAYOUTS = {"meld"}
 
 # Keep this map explicit so schema changes are intentional and reviewable.
 COLUMN_TYPES: dict[str, str] = {
@@ -335,6 +337,16 @@ def parse_card_types(type_line: Any) -> list[str]:
     return [token for token in main_part.split() if token]
 
 
+def should_import_card(card: dict[str, Any]) -> bool:
+    set_type = card.get("set_type")
+    if isinstance(set_type, str) and set_type in EXCLUDED_SET_TYPES:
+        return False
+    layout = card.get("layout")
+    if isinstance(layout, str) and layout in EXCLUDED_LAYOUTS:
+        return False
+    return True
+
+
 def import_cards(
     conn: sqlite3.Connection, source_gz_path: Path, batch_size: int, *, progress_every: int
 ) -> int:
@@ -354,6 +366,8 @@ def import_cards(
         for card in ijson.items(source, "item"):
             if not isinstance(card, dict):
                 continue
+            if not should_import_card(card):
+                continue
             row = normalize_card(card)
             pending.append(tuple(row[col] for col in insert_columns))
             if len(pending) >= batch_size:
@@ -370,6 +384,22 @@ def import_cards(
         total += len(pending)
 
     return total
+
+
+def remove_excluded_cards(conn: sqlite3.Connection) -> int:
+    set_type_placeholders = ", ".join("?" for _ in EXCLUDED_SET_TYPES)
+    layout_placeholders = ", ".join("?" for _ in EXCLUDED_LAYOUTS)
+    params = [*EXCLUDED_SET_TYPES, *EXCLUDED_LAYOUTS]
+    cursor = conn.execute(
+        f"""
+        DELETE FROM cards
+        WHERE "set_type" IN ({set_type_placeholders})
+           OR "layout" IN ({layout_placeholders});
+        """,
+        params,
+    )
+    conn.commit()
+    return int(cursor.rowcount)
 
 
 def open_json_stream(path: Path):
@@ -464,6 +494,7 @@ def main() -> int:
             batch_size=args.batch_size,
             progress_every=args.progress_every,
         )
+        removed_count = remove_excluded_cards(conn)
         conn.execute("ANALYZE;")
 
         conn.execute(
@@ -490,6 +521,12 @@ def main() -> int:
         download_path.unlink()
 
     log(f"Imported {imported_count:,} cards into {db_path}")
+    if removed_count > 0:
+        log(
+            "Removed "
+            f"{removed_count:,} excluded cards "
+            f'(set_type in {sorted(EXCLUDED_SET_TYPES)} or layout in {sorted(EXCLUDED_LAYOUTS)})'
+        )
     log(f"cards row count: {row_count:,}")
     if sample:
         log(f'sample card: id={sample[0]} name="{sample[1]}"')
