@@ -7,6 +7,7 @@ from json import dumps
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
 
+from card_lists import CARD_LIST_SETTING_ID, selected_card_list_id
 from card_query_engine import build_filter_where
 
 
@@ -44,16 +45,31 @@ class CardService:
         return conn
 
     @staticmethod
+    def _effective_settings_for_runtime(
+        settings: Dict[str, Dict[str, bool | int | float | str]],
+    ) -> Dict[str, Dict[str, bool | int | float | str]]:
+        active_card_list_id = selected_card_list_id(settings)
+        if active_card_list_id is None:
+            return settings
+        list_settings = settings.get(CARD_LIST_SETTING_ID, {})
+        if not isinstance(list_settings, dict):
+            return settings
+        return {CARD_LIST_SETTING_ID: dict(list_settings)}
+
+    @classmethod
     def _settings_signature(
+        cls,
         settings: Dict[str, Dict[str, bool | int | float | str]],
     ) -> str:
-        return dumps(settings, sort_keys=True, separators=(",", ":"))
+        effective_settings = cls._effective_settings_for_runtime(settings)
+        return dumps(effective_settings, sort_keys=True, separators=(",", ":"))
 
     def _build_runtime_cache_preview(
         self,
         settings_schema: List[Dict[str, object]],
         settings: Dict[str, Dict[str, bool | int | float | str]],
     ) -> RuntimeCache:
+        effective_settings = self._effective_settings_for_runtime(settings)
         signature = self._settings_signature(settings)
         cards_by_mana: Dict[ManaValue, List[str]] = {}
         available: List[ManaValue] = []
@@ -65,7 +81,7 @@ class CardService:
                 "cards_by_mana": {},
             }
 
-        where_sql, where_params = build_filter_where(settings_schema, settings)
+        where_sql, where_params = build_filter_where(settings_schema, effective_settings)
         sql = (
             f'SELECT "cmc", "name" FROM cards '
             f'WHERE "cmc" IS NOT NULL AND "name" IS NOT NULL AND ({where_sql});'
@@ -148,7 +164,8 @@ class CardService:
         if not self.has_database():
             return []
 
-        where_sql, where_params = build_filter_where(settings_schema, settings)
+        effective_settings = self._effective_settings_for_runtime(settings)
+        where_sql, where_params = build_filter_where(settings_schema, effective_settings)
         sql = (
             f'SELECT DISTINCT "cmc" FROM cards '
             f'WHERE "cmc" IS NOT NULL AND ({where_sql}) '
@@ -245,7 +262,8 @@ class CardService:
                 image_url = self.get_card_image_url_by_name(chosen_name)
                 return {"name": chosen_name, "image_url": image_url}
 
-        where_sql, where_params = build_filter_where(settings_schema, settings)
+        effective_settings = self._effective_settings_for_runtime(settings)
+        where_sql, where_params = build_filter_where(settings_schema, effective_settings)
         sql = (
             f'SELECT "name", "image_uris", "card_faces" FROM cards '
             f'WHERE "cmc" = ? AND ({where_sql});'

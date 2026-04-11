@@ -229,7 +229,7 @@ class UI:
 
         if self.hint_font is not None:
             hint = self.hint_font.render(
-                "K1 Settings / K2 Print / K3 Quit",
+                "K1 Game Settings / K2 Print Settings / K3 Quit",
                 True,
                 (170, 170, 170),
             )
@@ -256,7 +256,6 @@ class UI:
         selected_field: int,
         current_setting: Dict[str, Any],
         quick_labels: Dict[str, str],
-        printer_entry_label: str = "Printer Settings",
         divider_after_setting_id: str | None = None,
         disabled_setting_ids: Set[str] | None = None,
         status_message: str | None = None,
@@ -317,25 +316,14 @@ class UI:
             self.screen.blit(empty_text, (8, 50))
             return
 
-        settings_rows = len(settings_schema) + 1  # +1 dedicated Printer Settings item
+        settings_rows = len(settings_schema)
         selected_setting = max(0, min(selected_setting, settings_rows - 1))
-        selected_is_printer_row = selected_setting == len(settings_schema)
-        selected_setting_id = (
-            None
-            if selected_is_printer_row
-            else str(settings_schema[selected_setting].get("id", ""))
-        )
+        selected_setting_id = str(settings_schema[selected_setting].get("id", ""))
         disabled_ids = disabled_setting_ids or set()
-        selected_is_disabled = (
-            selected_setting_id in disabled_ids if selected_setting_id is not None else False
-        )
+        selected_is_disabled = selected_setting_id in disabled_ids
         selected_can_advanced = (
-            True
-            if selected_is_printer_row
-            else (
-                bool(settings_schema[selected_setting].get("show_advanced", False))
-                and not selected_is_disabled
-            )
+            bool(settings_schema[selected_setting].get("show_advanced", False))
+            and not selected_is_disabled
         )
         start = max(0, min(selected_setting - max_rows + 1, settings_rows - max_rows))
         end = min(settings_rows, start + max_rows)
@@ -346,17 +334,13 @@ class UI:
             if is_selected:
                 pygame.draw.rect(self.screen, (70, 70, 70), (4, y - 2, SCREEN_WIDTH - 8, row_height))
 
-            if idx == len(settings_schema):
-                line = f"{printer_entry_label}: Open >"
-                text_color = (255, 255, 255)
-            else:
-                item = settings_schema[idx]
-                setting_id = str(item.get("id", ""))
-                label = str(item.get("label", setting_id))
-                quick_label = quick_labels.get(setting_id, "Custom")
-                advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
-                line = f"{label}: {quick_label}{advanced_suffix}"
-                text_color = (130, 130, 130) if setting_id in disabled_ids else (255, 255, 255)
+            item = settings_schema[idx]
+            setting_id = str(item.get("id", ""))
+            label = str(item.get("label", setting_id))
+            quick_label = quick_labels.get(setting_id, "Custom")
+            advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
+            line = f"{label}: {quick_label}{advanced_suffix}"
+            text_color = (130, 130, 130) if setting_id in disabled_ids else (255, 255, 255)
             text_surface = self.menu_font.render(line, True, text_color)
             self.screen.blit(text_surface, (8, y))
             if (

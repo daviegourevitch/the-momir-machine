@@ -177,9 +177,6 @@ class MomirApp:
     def _notify_card_list_lock(self) -> None:
         self._set_status_message("Card list selected: other filters are locked.", 1700)
 
-    def _is_printer_settings_item_selected(self) -> bool:
-        return not self.in_advanced_mode and self.settings_index >= len(self.settings_schema)
-
     def _printer_settings(self) -> PrintSettings:
         if self.edit_print_settings is not None:
             return self.edit_print_settings
@@ -216,7 +213,10 @@ class MomirApp:
     def _open_settings(self) -> None:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
-        self.settings_index = max(0, min(self.settings_index, len(self.settings_schema)))
+        if self.settings_schema:
+            self.settings_index = max(0, min(self.settings_index, len(self.settings_schema) - 1))
+        else:
+            self.settings_index = 0
         self._set_popup(None)
         self.edit_settings = deepcopy(self.settings)
 
@@ -235,7 +235,7 @@ class MomirApp:
 
         if not self.settings_schema:
             return
-        total_rows = len(self.settings_schema) + 1  # +1 for Printer Settings entry
+        total_rows = len(self.settings_schema)
         self.settings_index = (self.settings_index + delta) % total_rows
 
     def _move_printer_selection(self, delta: int) -> None:
@@ -247,8 +247,6 @@ class MomirApp:
         return isinstance(value, (int, float)) and not isinstance(value, bool)
 
     def _cycle_quick_option(self, delta: int) -> None:
-        if self._is_printer_settings_item_selected():
-            return
         setting = self._current_setting()
         if not setting:
             return
@@ -371,9 +369,6 @@ class MomirApp:
         self._set_status_message("Printer settings reset to baseline.", 2200)
 
     def _enter_submenu(self) -> None:
-        if self._is_printer_settings_item_selected():
-            self._open_printer_settings()
-            return
         setting = self._current_setting()
         setting_id = str(setting.get("id", ""))
         if self._is_setting_locked_by_card_list(setting_id):
@@ -387,7 +382,7 @@ class MomirApp:
     def _back(self) -> None:
         if self.state == STATE_PRINTER_SETTINGS_MENU:
             self.edit_print_settings = None
-            self.state = STATE_SETTINGS_MENU
+            self.state = STATE_MAIN_MENU
             return
         if self.in_advanced_mode:
             self.in_advanced_mode = False
@@ -802,7 +797,6 @@ class MomirApp:
                 selected_field=self.advanced_field_index,
                 current_setting=current_setting,
                 quick_labels=quick_labels,
-                printer_entry_label="Printer Settings",
                 divider_after_setting_id=CARD_LIST_SETTING_ID,
                 disabled_setting_ids=disabled_setting_ids,
                 status_message=status_message,

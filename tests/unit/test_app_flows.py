@@ -314,3 +314,29 @@ def test_life_delta_is_logged_between_cards(build_app) -> None:
         "player1": -1,
         "player2": 1,
     }
+
+
+def test_back_from_printer_settings_returns_to_main_menu(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+
+    instance._open_printer_settings()
+    assert instance.state == "printer_settings_menu"
+    instance._handle_action("key2")
+
+    assert instance.state == "main_menu"
+
+
+def test_settings_selection_wraps_only_game_settings_rows(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+
+    instance._open_settings()
+    assert instance.state == "settings_menu"
+    assert len(instance.settings_schema) == 2
+
+    instance.settings_index = len(instance.settings_schema) - 1
+    instance._move_selection(1)
+    assert instance.settings_index == 0
+
+    instance.settings_index = 0
+    instance._move_selection(-1)
+    assert instance.settings_index == len(instance.settings_schema) - 1
