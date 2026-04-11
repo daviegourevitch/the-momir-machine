@@ -74,7 +74,37 @@ class UI:
         pygame.draw.rect(self.screen, (120, 30, 30), rect)
         self.screen.blit(text_surface, (rect.x + pad_x, rect.y + pad_y))
 
-    def _draw_popup(self, text: str, title: str = "Random Card") -> None:
+    def _draw_life_panel(self, player_life: Dict[int, int], selected_player: int) -> None:
+        if self.screen is None or self.menu_font is None:
+            return
+        panel_x = 8
+        panel_y = TOP_BANNER_HEIGHT + 8
+        panel_width = SCREEN_WIDTH - 16
+        panel_height = 48
+        pygame.draw.rect(self.screen, (0, 0, 0), (panel_x, panel_y, panel_width, panel_height))
+        pygame.draw.rect(
+            self.screen, (110, 110, 110), (panel_x, panel_y, panel_width, panel_height), 1
+        )
+
+        rows = (
+            (1, f"P1: {player_life.get(1, 20)}"),
+            (2, f"P2: {player_life.get(2, 20)}"),
+        )
+        for idx, (player, label) in enumerate(rows):
+            y = panel_y + 4 + (idx * 22)
+            is_selected = player == selected_player
+            if is_selected:
+                pygame.draw.rect(self.screen, (60, 60, 60), (panel_x + 3, y - 2, panel_width - 6, 20))
+            text = self.menu_font.render(label, True, (255, 255, 255))
+            self.screen.blit(text, (panel_x + 6, y))
+
+    def _draw_popup(
+        self,
+        text: str,
+        title: str = "Random Card",
+        options: List[str] | None = None,
+        selected_index: int = 0,
+    ) -> None:
         if self.screen is None:
             return
         title_font = self.title_font or self.menu_font
@@ -87,7 +117,7 @@ class UI:
         self.screen.blit(overlay, (0, 0))
 
         box_width = SCREEN_WIDTH - 26
-        box_height = 96
+        box_height = 140 if options else 96
         box_x = (SCREEN_WIDTH - box_width) // 2
         box_y = (SCREEN_HEIGHT - box_height) // 2
         pygame.draw.rect(self.screen, (28, 28, 28), (box_x, box_y, box_width, box_height))
@@ -100,8 +130,27 @@ class UI:
         self.screen.blit(body, (box_x + 8, box_y + 40))
 
         if self.hint_font is not None:
-            dismiss = self.hint_font.render("Press knob to dismiss", True, (200, 200, 200))
+            dismiss_text = (
+                "D-pad select, press in to confirm"
+                if options
+                else "Press in or knob to dismiss"
+            )
+            dismiss = self.hint_font.render(dismiss_text, True, (200, 200, 200))
             self.screen.blit(dismiss, (box_x + 8, box_y + box_height - 20))
+
+        if options and self.menu_font is not None:
+            selected = max(0, min(selected_index, len(options) - 1))
+            for index, option in enumerate(options):
+                option_y = box_y + 62 + (index * 20)
+                is_selected = index == selected
+                if is_selected:
+                    pygame.draw.rect(
+                        self.screen,
+                        (70, 70, 70),
+                        (box_x + 6, option_y - 2, box_width - 12, 18),
+                    )
+                option_surface = self.menu_font.render(option, True, (255, 255, 255))
+                self.screen.blit(option_surface, (box_x + 10, option_y))
 
     def setup(self) -> None:
         pygame.init()
@@ -138,6 +187,10 @@ class UI:
         mana_value: Union[int, float],
         popup_message: str | None = None,
         popup_title: str = "Random Card",
+        popup_options: List[str] | None = None,
+        popup_selected_index: int = 0,
+        selected_player: int = 1,
+        player_life: Dict[int, int] | None = None,
         status_message: str | None = None,
         is_loading: bool = False,
     ) -> None:
@@ -172,6 +225,8 @@ class UI:
             value_y = (TOP_BANNER_HEIGHT - value_text.get_height()) // 2
             self.screen.blit(value_text, (value_x, value_y))
 
+        self._draw_life_panel(player_life or {1: 20, 2: 20}, selected_player)
+
         if self.hint_font is not None:
             hint = self.hint_font.render(
                 "K1 Settings / K2 Print / K3 Quit",
@@ -183,7 +238,12 @@ class UI:
         if status_message:
             self._draw_status_banner(status_message)
         if popup_message:
-            self._draw_popup(popup_message, title=popup_title)
+            self._draw_popup(
+                popup_message,
+                title=popup_title,
+                options=popup_options,
+                selected_index=popup_selected_index,
+            )
         if is_loading:
             self._draw_loading_overlay()
 

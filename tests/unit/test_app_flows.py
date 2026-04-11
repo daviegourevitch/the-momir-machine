@@ -4,6 +4,7 @@ import importlib
 import sys
 import types
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Dict, TYPE_CHECKING
 
 import pytest
@@ -100,6 +101,7 @@ def build_app(monkeypatch: pytest.MonkeyPatch):
     settings = deepcopy(defaults)
 
     saved_settings: list[dict[str, Any]] = []
+    saved_logs: list[dict[str, Any]] = []
 
     monkeypatch.setattr(app, "InputController", StubInputController)
     monkeypatch.setattr(app, "UI", StubUI)
@@ -116,19 +118,24 @@ def build_app(monkeypatch: pytest.MonkeyPatch):
         "save_settings",
         lambda _path, payload: saved_settings.append(deepcopy(payload)),
     )
+    monkeypatch.setattr(
+        app,
+        "save_game_log",
+        lambda record, logs_dir: (saved_logs.append(deepcopy(record)) or (Path(logs_dir) / "game-log-test.json")),
+    )
     monkeypatch.setattr(app.pygame.time, "get_ticks", lambda: 10_000)
     monkeypatch.setattr(app.pygame.event, "pump", lambda: None)
 
     def _build():
         instance = app.MomirApp()
         instance._render = lambda: None
-        return instance, saved_settings, app
+        return instance, saved_settings, saved_logs, app
 
     return _build
 
 
 def test_save_settings_rejects_when_preview_has_no_mana(build_app) -> None:
-    instance, saved_settings, _app = build_app()
+    instance, saved_settings, _saved_logs, _app = build_app()
     instance.card_service._preview["available_mana_values"] = []
 
     instance._save_settings_if_valid()
@@ -138,7 +145,7 @@ def test_save_settings_rejects_when_preview_has_no_mana(build_app) -> None:
 
 
 def test_save_settings_persists_and_updates_runtime_cache(build_app) -> None:
-    instance, saved_settings, _app = build_app()
+    instance, saved_settings, _saved_logs, _app = build_app()
     candidate = deepcopy(instance.settings)
     candidate["card_type"]["creature"] = False
     instance.edit_settings = candidate
@@ -157,7 +164,8 @@ def test_save_settings_persists_and_updates_runtime_cache(build_app) -> None:
 
 
 def test_pick_random_card_handles_missing_result(build_app) -> None:
-    instance, _saved, _app = build_app()
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
     instance.card_service._random_card = None
 
     instance._pick_random_card()
@@ -166,7 +174,8 @@ def test_pick_random_card_handles_missing_result(build_app) -> None:
 
 
 def test_pick_random_card_handles_missing_printer(build_app) -> None:
-    instance, _saved, _app = build_app()
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
     instance.printer_connected = False
     instance.card_service._random_card = {
         "name": "Lightning Bolt",
@@ -179,7 +188,8 @@ def test_pick_random_card_handles_missing_printer(build_app) -> None:
 
 
 def test_pick_random_card_handles_missing_image_url(build_app, monkeypatch: pytest.MonkeyPatch) -> None:
-    instance, _saved, app_module = build_app()
+    instance, _saved, _saved_logs, app_module = build_app()
+    instance._start_new_game(1)
     instance.card_service._random_card = {"name": "Mystery Card", "image_url": None}
     monkeypatch.setattr(app_module, "print_card_image", lambda _url: True)
 
@@ -192,7 +202,8 @@ def test_pick_random_card_handles_missing_image_url(build_app, monkeypatch: pyte
 def test_pick_random_card_marks_printer_disconnected_on_print_failure(
     build_app, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    instance, _saved, app_module = build_app()
+    instance, _saved, _saved_logs, app_module = build_app()
+    instance._start_new_game(1)
     instance.printer_connected = True
     instance.card_service._random_card = {
         "name": "Primeval Titan",
@@ -204,3 +215,102 @@ def test_pick_random_card_marks_printer_disconnected_on_print_failure(
 
     assert instance.printer_connected is False
     assert instance.popup_message == "Your card is Primeval Titan (no printer connected)"
+
+
+def test_start_player_popup_defaults_on_boot(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+
+    assert instance.popup_mode == "start_player"
+    assert instance.popup_message == "Which player will start?"
+    assert instance.popup_options == ["Player 1", "Player 2", "Randomize for me"]
+
+
+def test_left_right_selects_expected_player(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
+
+    instance._handle_action("right")
+    assert instance.selected_player == 2
+    instance._handle_action("left")
+    assert instance.selected_player == 1
+
+
+def test_up_down_adjust_selected_player_life_by_one(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
+    instance._handle_action("right")
+
+    instance._handle_action("up")
+    assert instance.player_life[2] == 21
+    instance._handle_action("down")
+    assert instance.player_life[2] == 20
+
+
+def test_randomized_start_shows_second_popup_then_starts(build_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    instance, _saved, _saved_logs, app_module = build_app()
+    monkeypatch.setattr(app_module.random, "choice", lambda _values: 2)
+
+    instance.popup_selected_index = 2
+    instance._handle_action("joy_press")
+    assert instance.popup_mode == "random_start_result"
+    assert instance.popup_message == "Player 2 will start."
+    instance._handle_action("joy_press")
+
+    assert instance.game_active is True
+    assert instance.starting_player == 2
+    assert instance.selected_player == 2
+
+
+def test_end_game_prompt_no_keeps_game_active(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
+
+    instance._handle_action("joy_press")
+    assert instance.popup_mode == "game_complete"
+    instance._handle_action("joy_press")
+
+    assert instance.game_active is True
+    assert instance.popup_message is None
+
+
+def test_end_game_yes_resets_and_writes_log(build_app) -> None:
+    instance, _saved, saved_logs, _app = build_app()
+    instance._start_new_game(1)
+    instance._record_generated_card({"name": "Alpha", "image_url": "https://example.test/alpha.png"})
+    instance.selected_player = 1
+    instance._adjust_life(-1)
+
+    instance._handle_action("joy_press")
+    instance.popup_selected_index = 1
+    instance._handle_action("joy_press")
+
+    assert len(saved_logs) == 1
+    assert instance.game_active is False
+    assert instance.popup_mode == "start_player"
+    assert instance.player_life == {1: 20, 2: 20}
+
+
+def test_generated_cards_alternate_players_from_starter(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(2)
+
+    instance._record_generated_card({"name": "First", "image_url": "https://example.test/1.png"})
+    instance._record_generated_card({"name": "Second", "image_url": "https://example.test/2.png"})
+    instance._record_generated_card({"name": "Third", "image_url": "https://example.test/3.png"})
+
+    assert [entry["player"] for entry in instance.current_game_cards] == [2, 1, 2]
+
+
+def test_life_delta_is_logged_between_cards(build_app) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    instance._start_new_game(1)
+    instance._record_generated_card({"name": "First", "image_url": "https://example.test/1.png"})
+    instance._adjust_life(-1)
+    instance._handle_action("right")
+    instance._adjust_life(1)
+    instance._record_generated_card({"name": "Second", "image_url": "https://example.test/2.png"})
+
+    assert instance.current_game_cards[1]["life_delta_since_previous_card"] == {
+        "player1": -1,
+        "player2": 1,
+    }

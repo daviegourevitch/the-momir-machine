@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import queue
+import random
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import pygame
@@ -26,6 +28,7 @@ from constants import (
     ACTION_ROTARY_CW,
     ACTION_UP,
     CARD_DB_PATH,
+    GAME_LOGS_DIR,
     LISTS_DIR,
     MANA_VALUES,
     MENU_SCHEMA_PATH,
@@ -36,6 +39,7 @@ from constants import (
     STATE_SETTINGS_MENU,
 )
 from input_controller import InputController
+from game_log_store import build_game_log_record, save_game_log
 from runtime_mana_pool import RuntimeManaPool
 from runtime_coordination import RuntimeLock
 from printer_service import is_printer_connected, print_card_image
@@ -56,6 +60,11 @@ from settings_store import (
     save_settings,
 )
 from ui import UI
+
+POPUP_MODE_NONE = "none"
+POPUP_MODE_START_PLAYER = "start_player"
+POPUP_MODE_RANDOM_START_RESULT = "random_start_result"
+POPUP_MODE_GAME_COMPLETE = "game_complete"
 
 
 class MomirApp:
@@ -87,14 +96,27 @@ class MomirApp:
         self.in_advanced_mode = False
         self.popup_message: Optional[str] = None
         self.popup_title = "Random Card"
+        self.popup_options: Optional[list[str]] = None
+        self.popup_selected_index = 0
+        self.popup_mode = POPUP_MODE_NONE
         self.status_message: Optional[str] = None
         self.status_message_until_ms = 0
         self.startup_status_message: Optional[str] = None
+        self.player_life = {1: 20, 2: 20}
+        self.selected_player = 1
+        self.starting_player: Optional[int] = None
+        self.next_card_player = 1
+        self.pending_random_starting_player: Optional[int] = None
+        self.game_active = False
+        self.current_game_started_at: Optional[str] = None
+        self.current_game_cards: list[dict[str, Any]] = []
+        self.pending_life_delta = {1: 0, 2: 0}
         self.printer_connected = False
         self.is_loading = False
         self.runtime_lock = RuntimeLock()
         self._load_mana_values_for_current_settings()
         self._detect_printer_at_startup()
+        self._open_start_player_prompt()
 
     def _load_mana_values_for_current_settings(self) -> None:
         available_values = self.card_service.warm_runtime_cache(
@@ -195,8 +217,7 @@ class MomirApp:
         self.state = STATE_SETTINGS_MENU
         self.in_advanced_mode = False
         self.settings_index = max(0, min(self.settings_index, len(self.settings_schema)))
-        self.popup_message = None
-        self.popup_title = "Random Card"
+        self._set_popup(None)
         self.edit_settings = deepcopy(self.settings)
 
     def _open_printer_settings(self) -> None:
@@ -378,14 +399,169 @@ class MomirApp:
         self.status_message = text
         self.status_message_until_ms = pygame.time.get_ticks() + max(200, duration_ms)
 
-    def _set_popup(self, text: Optional[str], title: str = "Random Card") -> None:
+    def _set_popup(
+        self,
+        text: Optional[str],
+        title: str = "Random Card",
+        options: Optional[list[str]] = None,
+        selected_index: int = 0,
+        mode: str = POPUP_MODE_NONE,
+    ) -> None:
         self.popup_message = text
         self.popup_title = title
+        self.popup_options = options if options else None
+        if self.popup_options:
+            self.popup_selected_index = max(
+                0, min(selected_index, len(self.popup_options) - 1)
+            )
+        else:
+            self.popup_selected_index = 0
+        self.popup_mode = mode
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    def _open_start_player_prompt(self) -> None:
+        self.game_active = False
+        self.player_life = {1: 20, 2: 20}
+        self.selected_player = 1
+        self._set_popup(
+            "Which player will start?",
+            title="Game Setup",
+            options=["Player 1", "Player 2", "Randomize for me"],
+            selected_index=0,
+            mode=POPUP_MODE_START_PLAYER,
+        )
+
+    def _start_new_game(self, starting_player: int) -> None:
+        self.player_life = {1: 20, 2: 20}
+        self.starting_player = 1 if starting_player == 1 else 2
+        self.selected_player = self.starting_player
+        self.next_card_player = self.starting_player
+        self.pending_random_starting_player = None
+        self.pending_life_delta = {1: 0, 2: 0}
+        self.current_game_cards = []
+        self.current_game_started_at = self._now_iso()
+        self.game_active = True
+        self._set_popup(None)
+
+    def _select_player(self, player: int) -> None:
+        if not self.game_active:
+            return
+        self.selected_player = 1 if player == 1 else 2
+
+    def _adjust_life(self, delta: int) -> None:
+        if not self.game_active or delta == 0:
+            return
+        player = self.selected_player
+        self.player_life[player] += 1 if delta > 0 else -1
+        self.pending_life_delta[player] += 1 if delta > 0 else -1
+
+    def _record_generated_card(self, card: Dict[str, Any]) -> None:
+        if not self.game_active:
+            return
+        card_name = str(card.get("name", "Unknown Card"))
+        event = {
+            "card_index": len(self.current_game_cards) + 1,
+            "player": self.next_card_player,
+            "card_name": card_name,
+            "mana_value": self._current_mana_value(),
+            "life_before_card": {
+                "player1": self.player_life[1],
+                "player2": self.player_life[2],
+            },
+            "life_delta_since_previous_card": {
+                "player1": self.pending_life_delta[1],
+                "player2": self.pending_life_delta[2],
+            },
+        }
+        self.current_game_cards.append(event)
+        self.pending_life_delta = {1: 0, 2: 0}
+        self.next_card_player = 2 if self.next_card_player == 1 else 1
+
+    def _open_end_game_prompt(self) -> None:
+        if not self.game_active:
+            return
+        self._set_popup(
+            "Was this game completed?",
+            title="End Game",
+            options=["No", "Yes"],
+            selected_index=0,
+            mode=POPUP_MODE_GAME_COMPLETE,
+        )
+
+    def _finalize_game_log(self) -> None:
+        if not self.current_game_started_at:
+            return
+        record = build_game_log_record(
+            started_at=self.current_game_started_at,
+            ended_at=self._now_iso(),
+            starting_player=self.starting_player or 1,
+            cards=self.current_game_cards,
+            final_life_totals=self.player_life,
+        )
+        try:
+            path = save_game_log(record, logs_dir=GAME_LOGS_DIR)
+            self._set_status_message(f"Game logged: {path.name}", 3000)
+        except OSError:
+            self._set_status_message("Could not save game log.", 3000)
+
+    def _resolve_popup_selection(self) -> None:
+        if self.popup_mode == POPUP_MODE_START_PLAYER:
+            if self.popup_selected_index == 0:
+                self._start_new_game(1)
+                return
+            if self.popup_selected_index == 1:
+                self._start_new_game(2)
+                return
+            randomized = random.choice((1, 2))
+            self.pending_random_starting_player = randomized
+            self._set_popup(
+                f"Player {randomized} will start.",
+                title="Starting Player",
+                mode=POPUP_MODE_RANDOM_START_RESULT,
+            )
+            return
+
+        if self.popup_mode == POPUP_MODE_GAME_COMPLETE:
+            if self.popup_selected_index == 1:
+                self._finalize_game_log()
+                self._open_start_player_prompt()
+                return
+            self._set_popup(None)
+
+    def _handle_popup_action(self, action: str) -> bool:
+        if self.popup_mode == POPUP_MODE_NONE:
+            return False
+        if self.popup_mode in (POPUP_MODE_START_PLAYER, POPUP_MODE_GAME_COMPLETE):
+            if not self.popup_options:
+                return True
+            if action in (ACTION_UP, ACTION_LEFT):
+                self.popup_selected_index = (
+                    self.popup_selected_index - 1
+                ) % len(self.popup_options)
+                return True
+            if action in (ACTION_DOWN, ACTION_RIGHT):
+                self.popup_selected_index = (
+                    self.popup_selected_index + 1
+                ) % len(self.popup_options)
+                return True
+            if action in (ACTION_JOY_PRESS, ACTION_KEY1, ACTION_KNOB_PRESS):
+                self._resolve_popup_selection()
+                return True
+            return True
+
+        if self.popup_mode == POPUP_MODE_RANDOM_START_RESULT:
+            if action in (ACTION_JOY_PRESS, ACTION_KEY1, ACTION_KNOB_PRESS):
+                self._start_new_game(self.pending_random_starting_player or 1)
+            return True
+        return False
 
     def _detect_printer_at_startup(self) -> None:
         self.printer_connected = is_printer_connected()
         if not self.printer_connected:
-            self._set_popup("No printer connected. Printing is disabled.", "Printer Error")
+            self.startup_status_message = "No printer connected. Printing is disabled."
 
     def _active_status_message(self) -> Optional[str]:
         if not self.status_message:
@@ -396,6 +572,9 @@ class MomirApp:
         return self.status_message
 
     def _pick_random_card(self) -> None:
+        if not self.game_active:
+            self._open_start_player_prompt()
+            return
         self.is_loading = True
         self._set_popup(None)
         self._drop_pending_actions()
@@ -410,6 +589,7 @@ class MomirApp:
             self._set_popup("No matching card found.")
             return
 
+        self._record_generated_card(card)
         card_name = card["name"]
         image_url = card["image_url"]
         if not self.printer_connected:
@@ -479,6 +659,8 @@ class MomirApp:
             return
 
         if self.state == STATE_MAIN_MENU:
+            if self._handle_popup_action(action):
+                return
             if action == ACTION_ROTARY_CW:
                 self._inc_mana_index()
             elif action == ACTION_ROTARY_CCW:
@@ -488,6 +670,16 @@ class MomirApp:
                     self._set_popup(None)
                 else:
                     self._pick_random_card()
+            elif action == ACTION_LEFT:
+                self._select_player(1)
+            elif action == ACTION_RIGHT:
+                self._select_player(2)
+            elif action == ACTION_UP:
+                self._adjust_life(1)
+            elif action == ACTION_DOWN:
+                self._adjust_life(-1)
+            elif action == ACTION_JOY_PRESS:
+                self._open_end_game_prompt()
             elif action == ACTION_KEY1:
                 self._open_settings()
             elif action == ACTION_KEY2:
@@ -580,6 +772,10 @@ class MomirApp:
                 self._current_mana_value(),
                 popup_message=self.popup_message,
                 popup_title=self.popup_title,
+                popup_options=self.popup_options,
+                popup_selected_index=self.popup_selected_index,
+                selected_player=self.selected_player,
+                player_life=self.player_life,
                 status_message=status_message,
                 is_loading=self.is_loading,
             )
