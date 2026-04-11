@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
+from card_lists import CARD_LIST_SETTING_ID, selected_card_list_id
+
 
 SQLParams = List[Any]
 SQLParts = Tuple[str, SQLParams]
@@ -161,6 +163,18 @@ def _rule_to_sql(rule: Dict[str, Any]) -> SQLParts:
         value = rule.get("value")
         return f"json_extract({column}, '$.' || ?) = ?", [key, value]
 
+    if op == "name_in_list":
+        list_id = rule.get("list_id")
+        if not isinstance(list_id, str) or not list_id:
+            raise ValueError("Invalid 'name_in_list' list_id")
+        return (
+            "EXISTS ("
+            "SELECT 1 FROM card_lists AS cl "
+            f"WHERE cl.list_id = ? AND cl.card_name_lower = LOWER({column})"
+            ")",
+            [list_id],
+        )
+
     raise ValueError(f"Unsupported filter operation: {op}")
 
 
@@ -189,9 +203,14 @@ def build_filter_where(
 ) -> SQLParts:
     all_clauses: List[str] = []
     all_params: SQLParams = []
+    active_card_list_id = selected_card_list_id(settings)
 
     for setting_schema in settings_schema:
         if not isinstance(setting_schema, dict):
+            continue
+        setting_id = str(setting_schema.get("id", ""))
+        if active_card_list_id and setting_id != CARD_LIST_SETTING_ID:
+            # Card-list mode intentionally ignores conflicting settings.
             continue
         filter_def = setting_schema.get("filter")
         if not isinstance(filter_def, dict):
@@ -202,7 +221,6 @@ def build_filter_where(
         if not isinstance(mode, str) or not isinstance(field_rules, dict):
             continue
 
-        setting_id = str(setting_schema.get("id", ""))
         setting_values = settings.get(setting_id, {})
         field_map = _field_map_for_setting(setting_schema)
 

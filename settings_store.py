@@ -97,6 +97,12 @@ def _validate_rule(rule: Any) -> Dict[str, Any] | None:
             return None
         return {"op": op, "column": column, "key": key, "value": value}
 
+    if op == "name_in_list":
+        list_id = rule.get("list_id")
+        if not isinstance(list_id, str) or not list_id:
+            return None
+        return {"op": op, "column": column, "list_id": list_id}
+
     return None
 
 

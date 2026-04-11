@@ -12,6 +12,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from card_lists import ensure_card_lists_schema
+
 try:
     import ijson
 except ImportError as exc:  # pragma: no cover - handled at runtime
@@ -243,6 +245,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
         """
     )
     ensure_cards_columns(conn)
+    ensure_card_lists_schema(conn)
 
     conn.execute(
         """

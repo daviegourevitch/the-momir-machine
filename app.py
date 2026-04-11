@@ -6,6 +6,12 @@ from typing import Any, Dict, Optional
 
 import pygame
 
+from card_lists import (
+    CARD_LIST_SETTING_ID,
+    apply_card_list_setting,
+    selected_card_list_id,
+    sync_card_lists,
+)
 from card_service import CardService
 from constants import (
     ACTION_DOWN,
@@ -20,6 +26,7 @@ from constants import (
     ACTION_ROTARY_CW,
     ACTION_UP,
     CARD_DB_PATH,
+    LISTS_DIR,
     MANA_VALUES,
     MENU_SCHEMA_PATH,
     PRINT_SETTINGS_PATH,
@@ -61,6 +68,8 @@ class MomirApp:
         self.ui = UI()
 
         self.settings_schema = load_menu_schema(MENU_SCHEMA_PATH)
+        self.card_lists = sync_card_lists(CARD_DB_PATH, LISTS_DIR)
+        self.settings_schema = apply_card_list_setting(self.settings_schema, self.card_lists)
         self.default_settings = build_default_settings(self.settings_schema)
         self.settings = load_settings(
             SETTINGS_PATH, self.default_settings, self.settings_schema
@@ -126,6 +135,25 @@ class MomirApp:
         if self.edit_settings is not None:
             return self.edit_settings
         return self.settings
+
+    def _is_card_list_active(
+        self,
+        settings: Optional[Dict[str, Dict[str, bool | int | float | str]]] = None,
+    ) -> bool:
+        settings_view = self._menu_settings() if settings is None else settings
+        return selected_card_list_id(settings_view) is not None
+
+    def _is_setting_locked_by_card_list(
+        self,
+        setting_id: str,
+        settings: Optional[Dict[str, Dict[str, bool | int | float | str]]] = None,
+    ) -> bool:
+        if setting_id == CARD_LIST_SETTING_ID:
+            return False
+        return self._is_card_list_active(settings)
+
+    def _notify_card_list_lock(self) -> None:
+        self._set_status_message("Card list selected: other filters are locked.", 1700)
 
     def _is_printer_settings_item_selected(self) -> bool:
         return not self.in_advanced_mode and self.settings_index >= len(self.settings_schema)
@@ -203,6 +231,10 @@ class MomirApp:
         setting = self._current_setting()
         if not setting:
             return
+        setting_id = str(setting.get("id", ""))
+        if self._is_setting_locked_by_card_list(setting_id):
+            self._notify_card_list_lock()
+            return
         quick_options = setting.get("quick_options", [])
         if not isinstance(quick_options, list) or not quick_options:
             return
@@ -221,6 +253,10 @@ class MomirApp:
             values[str(field_id)] = value
 
     def _adjust_advanced_value(self, delta: int) -> None:
+        setting_id = str(self._current_setting().get("id", ""))
+        if self._is_setting_locked_by_card_list(setting_id):
+            self._notify_card_list_lock()
+            return
         field = self._current_advanced_field()
         if not field:
             return
@@ -318,6 +354,10 @@ class MomirApp:
             self._open_printer_settings()
             return
         setting = self._current_setting()
+        setting_id = str(setting.get("id", ""))
+        if self._is_setting_locked_by_card_list(setting_id):
+            self._notify_card_list_lock()
+            return
         if not self._setting_allows_advanced(setting):
             return
         self.in_advanced_mode = True
@@ -546,6 +586,13 @@ class MomirApp:
         elif self.state == STATE_SETTINGS_MENU:
             current_setting = self._current_setting()
             menu_settings = self._menu_settings()
+            disabled_setting_ids: set[str] = set()
+            if self._is_card_list_active(menu_settings):
+                disabled_setting_ids = {
+                    str(setting.get("id", ""))
+                    for setting in self.settings_schema
+                    if str(setting.get("id", "")) != CARD_LIST_SETTING_ID
+                }
             quick_labels: Dict[str, str] = {}
             for setting in self.settings_schema:
                 setting_id = str(setting.get("id", ""))
@@ -560,6 +607,8 @@ class MomirApp:
                 current_setting=current_setting,
                 quick_labels=quick_labels,
                 printer_entry_label="Printer Settings",
+                divider_after_setting_id=CARD_LIST_SETTING_ID,
+                disabled_setting_ids=disabled_setting_ids,
                 status_message=status_message,
                 is_loading=self.is_loading,
             )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import pygame
 
@@ -197,6 +197,8 @@ class UI:
         current_setting: Dict[str, Any],
         quick_labels: Dict[str, str],
         printer_entry_label: str = "Printer Settings",
+        divider_after_setting_id: str | None = None,
+        disabled_setting_ids: Set[str] | None = None,
         status_message: str | None = None,
         is_loading: bool = False,
     ) -> None:
@@ -258,10 +260,22 @@ class UI:
         settings_rows = len(settings_schema) + 1  # +1 dedicated Printer Settings item
         selected_setting = max(0, min(selected_setting, settings_rows - 1))
         selected_is_printer_row = selected_setting == len(settings_schema)
+        selected_setting_id = (
+            None
+            if selected_is_printer_row
+            else str(settings_schema[selected_setting].get("id", ""))
+        )
+        disabled_ids = disabled_setting_ids or set()
+        selected_is_disabled = (
+            selected_setting_id in disabled_ids if selected_setting_id is not None else False
+        )
         selected_can_advanced = (
             True
             if selected_is_printer_row
-            else bool(settings_schema[selected_setting].get("show_advanced", False))
+            else (
+                bool(settings_schema[selected_setting].get("show_advanced", False))
+                and not selected_is_disabled
+            )
         )
         start = max(0, min(selected_setting - max_rows + 1, settings_rows - max_rows))
         end = min(settings_rows, start + max_rows)
@@ -274,6 +288,7 @@ class UI:
 
             if idx == len(settings_schema):
                 line = f"{printer_entry_label}: Open >"
+                text_color = (255, 255, 255)
             else:
                 item = settings_schema[idx]
                 setting_id = str(item.get("id", ""))
@@ -281,15 +296,31 @@ class UI:
                 quick_label = quick_labels.get(setting_id, "Custom")
                 advanced_suffix = " >" if bool(item.get("show_advanced", False)) else ""
                 line = f"{label}: {quick_label}{advanced_suffix}"
-            text_surface = self.menu_font.render(line, True, (255, 255, 255))
+                text_color = (130, 130, 130) if setting_id in disabled_ids else (255, 255, 255)
+            text_surface = self.menu_font.render(line, True, text_color)
             self.screen.blit(text_surface, (8, y))
+            if (
+                idx < len(settings_schema)
+                and str(settings_schema[idx].get("id", "")) == divider_after_setting_id
+            ):
+                line_y = y + row_height - 4
+                pygame.draw.line(
+                    self.screen,
+                    (95, 95, 95),
+                    (8, line_y),
+                    (SCREEN_WIDTH - 8, line_y),
+                    1,
+                )
 
         if self.hint_font is not None:
-            hint_text = (
-                "L/R quick  K1 advanced  K2/JOY back  K3 save"
-                if selected_can_advanced
-                else "L/R quick  K2/JOY back  K3 save"
-            )
+            if selected_is_disabled:
+                hint_text = "List selected: this setting is disabled  K2/JOY back  K3 save"
+            else:
+                hint_text = (
+                    "L/R quick  K1 advanced  K2/JOY back  K3 save"
+                    if selected_can_advanced
+                    else "L/R quick  K2/JOY back  K3 save"
+                )
             hint = self.hint_font.render(hint_text, True, (170, 170, 170))
             self.screen.blit(hint, (6, SCREEN_HEIGHT - 18))
             if status_message:
