@@ -1,6 +1,38 @@
 {
   "settings": [
     {
+      "id": "card_list",
+      "label": "Card List",
+      "show_advanced": false,
+      "filter": {
+        "mode": "selected_field_rule",
+        "selected_field": "list_id",
+        "field_rules": {
+          "__unused__": {
+            "op": "eq",
+            "column": "id",
+            "value": "__unused__"
+          }
+        }
+      },
+      "advanced_fields": [
+        {
+          "id": "list_id",
+          "label": "Card List",
+          "type": "string",
+          "default": "na",
+          "options": ["na"]
+        }
+      ],
+      "quick_options": [
+        {
+          "id": "na",
+          "label": "N/A",
+          "values": { "list_id": "na" }
+        }
+      ]
+    },
+    {
       "id": "card_type",
       "label": "Card Type",
       "filter": {
