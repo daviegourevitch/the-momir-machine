@@ -376,7 +376,7 @@ class MomirApp:
             self._set_popup(f"Your card is {card_name} (no printer connected)")
             return
 
-        self._set_popup(f"Printing card {card_name}", "Printer")
+        self._set_popup("Printing...", "Printer")
         self._render()
         pygame.event.pump()
 
@@ -387,7 +387,7 @@ class MomirApp:
 
         printed = print_card_image(image_url)
         if printed:
-            self._set_popup(f"Your card is {card_name}")
+            self._set_popup(None)
             return
 
         self.printer_connected = False
