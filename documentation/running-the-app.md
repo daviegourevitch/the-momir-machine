@@ -57,6 +57,22 @@ On recent Debian / Raspberry Pi OS, the system Python is **externally managed** 
    bash scripts/run-momir.sh
    ```
 
+## Start automatically at login
+
+The Pi logs straight into the desktop, so Momir is started from an XDG autostart entry at `~/.config/autostart/momir.desktop`:
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Momir Machine (autostart)
+Comment=Start the Momir app at login
+Exec=env DISPLAY=:0 XAUTHORITY=/home/david/.Xauthority /bin/bash -c "sleep 5; exec /home/david/Code/the-momir-machine/scripts/run-momir.sh >> /home/david/momir-run.log 2>&1"
+Path=/home/david/Code/the-momir-machine
+Terminal=false
+```
+
+Output goes to `~/momir-run.log`. Delete the file to turn autostart off. Quitting with KEY3 leaves you at the desktop; relaunch from the desktop shortcut.
+
 ## After setup
 
 - **HAT mouse helper vs Momir:** `os-scripts/mouse.py` should be launched at login and left running. It automatically enters standby when Momir acquires the runtime lock and resumes when Momir exits. Start Momir via [`scripts/run-momir.sh`](../scripts/run-momir.sh) (or `python app.py`) so lock ownership is handled in-app.

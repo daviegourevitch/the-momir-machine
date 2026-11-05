@@ -26,7 +26,10 @@
     WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 \
     setsid nohup bash scripts/run-momir.sh > ~/momir-run.log 2>&1 < /dev/null &
   ```
-  Check with `ps aux | grep app.py`. The HAT mouse helper (`os-scripts/mouse.py`, venv `~/waveshare-mouse-venv`) autostarts from `~/.config/autostart/waveshare-mouse.desktop` and should be left running.
+  Check with `ps aux | grep app.py`. If Momir is already running, the runtime lock makes a second launch exit with "already running".
+- **Autostart:** Momir starts at login (the Pi autologs into a labwc desktop) via `~/.config/autostart/momir.desktop`. It runs `scripts/run-momir.sh` with `DISPLAY=:0 XAUTHORITY=/home/david/.Xauthority` after a 5s delay, no terminal, appending output to `~/momir-run.log`. To disable it, delete that file. The user also has a manual launcher at `~/Desktop/Momir.desktop` (opens a terminal). KEY3 quits the app back to the desktop; autostart does not restart it.
+- Reboot: `sudo systemctl reboot`, then poll `ssh momir 'pgrep -f app.py'` — boot to app takes well under a minute.
+- The HAT mouse helper (`os-scripts/mouse.py`, venv `~/waveshare-mouse-venv`) autostarts from `~/.config/autostart/waveshare-mouse.desktop` and should be left running.
 - Thermal printer shows in `lsusb` as `28e9:0289 GDMicroelectronics micro-printer`.
 - The user can watch the LCD and confirm things visually; ask them when a check needs eyes on the screen.
 
