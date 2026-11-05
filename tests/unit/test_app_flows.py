@@ -70,9 +70,14 @@ class StubCardService:
         return deepcopy(self._random_card)
 
 
+class StubCardImageError(Exception):
+    pass
+
+
 @pytest.fixture
 def build_app(monkeypatch: pytest.MonkeyPatch):
     stub_printer_service = types.SimpleNamespace(
+        CardImageError=StubCardImageError,
         is_printer_connected=lambda: True,
         print_card_image=lambda _url: True,
     )
@@ -215,6 +220,97 @@ def test_pick_random_card_marks_printer_disconnected_on_print_failure(
 
     assert instance.printer_connected is False
     assert instance.popup_message == "Your card is Primeval Titan (no printer connected)"
+
+
+def test_pick_random_card_survives_image_download_failure(
+    build_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instance, _saved, _saved_logs, app_module = build_app()
+    instance._start_new_game(1)
+    instance.printer_connected = True
+    instance.card_service._random_card = {
+        "name": "Grizzly Bears",
+        "image_url": "https://cards.scryfall.io/large/front/bears.jpg",
+    }
+
+    def _fail(_url: str) -> bool:
+        raise app_module.CardImageError("403 Forbidden")
+
+    monkeypatch.setattr(app_module, "print_card_image", _fail)
+
+    instance._pick_random_card()
+
+    assert instance.popup_message == "Your card is Grizzly Bears"
+    assert instance.status_message == "Could not print card: image download failed."
+    # An image download failure is not a printer failure.
+    assert instance.printer_connected is True
+    assert instance.is_loading is False
+    assert [entry["card_name"] for entry in instance.current_game_cards] == ["Grizzly Bears"]
+
+
+def test_pick_random_card_survives_unexpected_print_error(
+    build_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instance, _saved, _saved_logs, app_module = build_app()
+    instance._start_new_game(1)
+    instance.printer_connected = True
+    instance.card_service._random_card = {
+        "name": "Hill Giant",
+        "image_url": "https://example.test/giant.png",
+    }
+
+    def _explode(_url: str) -> bool:
+        raise RuntimeError("usb write failed")
+
+    monkeypatch.setattr(app_module, "print_card_image", _explode)
+
+    instance._pick_random_card()
+
+    assert instance.popup_message == "Your card is Hill Giant"
+    assert instance.status_message == "Could not print card: printer error."
+    assert instance.is_loading is False
+
+
+def test_knob_press_with_failing_print_keeps_app_running(
+    build_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instance, _saved, _saved_logs, app_module = build_app()
+    instance._start_new_game(1)
+
+    def _fail(_url: str) -> bool:
+        raise app_module.CardImageError("connection refused")
+
+    monkeypatch.setattr(app_module, "print_card_image", _fail)
+
+    instance.action_queue.put("knob_press")
+    instance._drain_actions()
+
+    assert instance.running is True
+    assert instance.popup_message == "Your card is Alpha"
+
+
+def test_drain_actions_recovers_from_unexpected_action_error(
+    build_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instance, _saved, _saved_logs, _app = build_app()
+    handled: list[str] = []
+
+    def _handle(action: str) -> None:
+        handled.append(action)
+        if action == "boom":
+            instance.is_loading = True
+            raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(instance, "_handle_action", _handle)
+    instance.action_queue.put("boom")
+    instance.action_queue.put("after")
+
+    instance._drain_actions()
+
+    assert handled == ["boom", "after"]
+    assert instance.running is True
+    assert instance.is_loading is False
+    assert instance.status_message == "Something went wrong. See logs."
 
 
 def test_start_player_popup_defaults_on_boot(build_app) -> None:

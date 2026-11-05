@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import random
+import traceback
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -42,7 +43,7 @@ from input_controller import InputController
 from game_log_store import build_game_log_record, save_game_log
 from runtime_mana_pool import RuntimeManaPool
 from runtime_coordination import RuntimeLock
-from printer_service import is_printer_connected, print_card_image
+from printer_service import CardImageError, is_printer_connected, print_card_image
 from print_settings_store import (
     DEFAULT_PRINT_SETTINGS,
     PRINT_SETTING_FIELDS,
@@ -600,7 +601,18 @@ class MomirApp:
             self._set_status_message("Could not print card: missing image URL.", 3000)
             return
 
-        printed = print_card_image(image_url)
+        try:
+            printed = print_card_image(image_url)
+        except CardImageError as exc:
+            print(f"Could not print card: {exc}")
+            self._set_popup(f"Your card is {card_name}")
+            self._set_status_message("Could not print card: image download failed.", 3000)
+            return
+        except Exception:
+            traceback.print_exc()
+            self._set_popup(f"Your card is {card_name}")
+            self._set_status_message("Could not print card: printer error.", 3000)
+            return
         if printed:
             self._set_popup(None)
             return
@@ -758,7 +770,14 @@ class MomirApp:
                 action = self.action_queue.get_nowait()
             except queue.Empty:
                 break
-            self._handle_action(action)
+            try:
+                self._handle_action(action)
+            except Exception:
+                # Last line of defence: an unexpected error in one action must not
+                # take down the whole machine mid-game.
+                traceback.print_exc()
+                self.is_loading = False
+                self._set_status_message("Something went wrong. See logs.", 3000)
 
     def _render(self) -> None:
         status_message = self._active_status_message()

@@ -63,3 +63,14 @@ GAME_LOGS_DIR = ROOT_DIR / "data" / "game-logs"
 LISTS_DIR = ROOT_DIR / "lists"
 BACKGROUND_PATH = ROOT_DIR / "animation" / "originals" / "from-modo.jpg"
 MANA_ICONS_DIR = ROOT_DIR / "mana-icons"
+
+# Scryfall rejects requests without a descriptive User-Agent and an Accept header.
+# https://scryfall.com/docs/api
+SCRYFALL_USER_AGENT = (
+    "The-Momir-Machine/1.0 "
+    "(+https://github.com/daviegourevitch/the-momir-machine)"
+)
+SCRYFALL_IMAGE_HEADERS = {
+    "User-Agent": SCRYFALL_USER_AGENT,
+    "Accept": "image/png,image/jpeg,image/*;q=0.9,*/*;q=0.8",
+}

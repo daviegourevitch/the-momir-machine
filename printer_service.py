@@ -9,12 +9,17 @@ import usb.core
 import usb.util
 from escpos.exceptions import Error as EscposError
 from escpos.printer import Usb
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, UnidentifiedImageError
 
-from constants import PRINT_SETTINGS_PATH
+from constants import PRINT_SETTINGS_PATH, SCRYFALL_IMAGE_HEADERS
 from print_settings_store import PrintSettings, load_print_settings
 
 PRINTER_WIDTH_PX = 384
+IMAGE_FETCH_TIMEOUT_S = 30
+
+
+class CardImageError(Exception):
+    """The card image could not be downloaded or decoded (printer is not at fault)."""
 
 
 def flatten_alpha_to_white(image: Image.Image) -> Image.Image:
@@ -57,10 +62,20 @@ def fetch_and_prepare_image(
     target_width: int = PRINTER_WIDTH_PX,
     print_settings: Optional[PrintSettings] = None,
 ) -> Image.Image:
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            url, headers=SCRYFALL_IMAGE_HEADERS, timeout=IMAGE_FETCH_TIMEOUT_S
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise CardImageError(f"failed to download card image {url}: {exc}") from exc
 
-    image = Image.open(BytesIO(response.content))
+    try:
+        image = Image.open(BytesIO(response.content))
+        image.load()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise CardImageError(f"failed to decode card image {url}: {exc}") from exc
+
     settings = (
         print_settings if print_settings is not None else load_print_settings(PRINT_SETTINGS_PATH)
     )
